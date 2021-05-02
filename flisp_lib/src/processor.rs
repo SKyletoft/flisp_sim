@@ -13,17 +13,50 @@ pub struct Flisp {
 }
 
 impl Flisp {
+	fn set_n(&mut self, to: bool) {
+		self.CC = (self.CC & !(1 << 3)) | ((to as u8) << 3);
+	}
+	fn set_z(&mut self, to: bool) {
+		self.CC = (self.CC & !(1 << 2)) | ((to as u8) << 2);
+	}
+	fn set_v(&mut self, to: bool) {
+		self.CC = (self.CC & !(1 << 1)) | ((to as u8) << 1);
+	}
+	fn set_c(&mut self, to: bool) {
+		self.CC = (self.CC & !1) | (to as u8);
+	}
+
 	fn add(&mut self, data: u8) {
+		let a_before = self.A as i8;
 		let (res, carry) = self.A.overflowing_add(data);
 		self.A = res;
-		self.CC = (self.CC & 0b1111_1110) | carry as u8;
+		self.set_n((res & (1 << 7)) != 0);
+		self.set_z(res == 0);
+		self.set_v(a_before > self.A as i8);
+		self.set_c(carry);
+	}
+
+	fn anda(&mut self, data: u8) {
+		self.A &= data;
+		self.set_n(self.A & (1 << 7) != 0);
+		self.set_z(self.A == 0);
+		self.set_v(false);
 	}
 
 	pub fn step(&mut self) -> crate::error::Result<()> {
 		let inst: Instruction = Instruction::try_from(self.mem[self.SP as usize])?;
 		let n = self.mem[self.SP.wrapping_add(1) as usize];
 		match inst {
-			Instruction::ADCA(_) => {}
+			Instruction::ADCA(adr) => {
+				let rhs = match adr {
+					AdcaAddr::Addr => self.mem[n as usize],
+					AdcaAddr::Data => n,
+					AdcaAddr::nSP => n.wrapping_add(self.SP),
+					AdcaAddr::nX => n.wrapping_add(self.X),
+					AdcaAddr::nY => n.wrapping_add(self.Y),
+				};
+				self.add(rhs + (self.CC & 1));
+			}
 			Instruction::ADDA(adr) => {
 				let rhs = match adr {
 					AddaAddr::Addr => self.mem[n as usize],
@@ -34,10 +67,31 @@ impl Flisp {
 				};
 				self.add(rhs);
 			}
-			Instruction::ANDA(_) => {}
-			Instruction::ANDCC => {}
+			Instruction::ANDA(adr) => {
+				let rhs = match adr {
+					AndaAddr::Addr => self.mem[n as usize],
+					AndaAddr::Data => n,
+					AndaAddr::nSP => n.wrapping_add(self.SP),
+					AndaAddr::nX => n.wrapping_add(self.X),
+					AndaAddr::nY => n.wrapping_add(self.Y),
+				};
+				self.anda(rhs);
+			}
+			Instruction::ANDCC => {
+				let rhs = n;
+				self.CC &= rhs;
+			}
 			Instruction::ASLA => {}
-			Instruction::ASL(_) => {}
+			Instruction::ASL(adr) => {
+				let idx = match adr {
+					AslAddr::Addr => n,
+					AslAddr::nSP => n + self.SP,
+					AslAddr::nX => n + self.X,
+					AslAddr::nY => n + self.Y,
+					AslAddr::AY => self.A + self.Y,
+					AslAddr::AX => self.A + self.X,
+				};
+			}
 			Instruction::ASRA => {}
 			Instruction::ASR(_) => {}
 			Instruction::BITA(_) => {}
