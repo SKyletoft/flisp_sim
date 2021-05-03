@@ -1,14 +1,17 @@
-use std::{convert::TryFrom, result, str::FromStr};
+use std::{convert::TryFrom, mem, result, str::FromStr};
 
 use crate::*;
 
+#[allow(non_snake_case, non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Flisp {
 	A: u8,
 	Y: u8,
 	X: u8,
-	CC: u8, //	INZVC
+	/// INZVC
+	CC: u8,
 	SP: u8,
+	PC: u8,
 	mem: [u8; 256],
 }
 
@@ -16,36 +19,120 @@ impl Flisp {
 	fn set_n(&mut self, to: bool) {
 		self.CC = (self.CC & !(1 << 3)) | ((to as u8) << 3);
 	}
+	fn get_n(&self) -> bool {
+		self.CC & (1 << 3) != 0
+	}
+	fn set_n_from(&mut self, data: u8) {
+		self.set_n((data & 0b1000_0000) != 0);
+	}
 	fn set_z(&mut self, to: bool) {
 		self.CC = (self.CC & !(1 << 2)) | ((to as u8) << 2);
+	}
+	fn get_z(&self) -> bool {
+		self.CC & (1 << 2) != 0
+	}
+	fn set_z_from(&mut self, data: u8) {
+		self.set_z(data == 0);
 	}
 	fn set_v(&mut self, to: bool) {
 		self.CC = (self.CC & !(1 << 1)) | ((to as u8) << 1);
 	}
+	fn get_v(&self) -> bool {
+		self.CC & (1 << 2) != 0
+	}
 	fn set_c(&mut self, to: bool) {
 		self.CC = (self.CC & !1) | (to as u8);
+	}
+	fn get_c(&self) -> bool {
+		self.CC & 1 != 0
 	}
 
 	fn add(&mut self, data: u8) {
 		let a_before = self.A as i8;
 		let (res, carry) = self.A.overflowing_add(data);
 		self.A = res;
-		self.set_n((res & (1 << 7)) != 0);
-		self.set_z(res == 0);
+		self.set_n_from(res);
+		self.set_z_from(res);
 		self.set_v(a_before > self.A as i8);
 		self.set_c(carry);
 	}
 
-	fn anda(&mut self, data: u8) {
-		self.A &= data;
-		self.set_n(self.A & (1 << 7) != 0);
-		self.set_z(self.A == 0);
+	fn and(&mut self, data: u8) -> u8 {
+		let res = self.A & data;
+		self.set_n_from(res);
+		self.set_z_from(res);
 		self.set_v(false);
+		res
+	}
+
+	fn asl(&mut self, data: u8) -> u8 {
+		let res = data << 1;
+		self.set_n_from(res);
+		self.set_z_from(res);
+		self.set_v(((data ^ res) & 0b1000_0000) != 0);
+		self.set_c((data & 0b1000_0000) != 0);
+		data << 1
+	}
+
+	fn asr(&mut self, data: u8) -> u8 {
+		let res = (data >> 1) | (data & 0b1000_0000);
+		self.set_n_from(data);
+		self.set_z_from(res);
+		self.set_v(false);
+		self.set_c((data & 1) != 0);
+		res
+	}
+
+	fn clr(&mut self) {
+		self.set_n(false);
+		self.set_z(true);
+		self.set_v(false);
+		self.set_c(false);
+	}
+
+	fn cmp(&mut self, lhs: u8, rhs: u8) {
+		let (diff, carry) = lhs.overflowing_sub(rhs);
+		self.set_n_from(diff);
+		self.set_z_from(diff);
+		self.set_v(carry);
+		self.set_c(diff as i8 > lhs as i8); //Unsure
+	}
+
+	fn com(&mut self, data: u8) -> u8 {
+		let res = !data;
+		self.set_n_from(res);
+		self.set_z_from(res);
+		self.set_v(false);
+		res
+	}
+
+	fn dec(&mut self, data: u8) -> u8 {
+		let (res, carry) = data.overflowing_sub(1);
+		self.set_n_from(res);
+		self.set_z_from(res);
+		self.set_v(carry);
+		res
+	}
+
+	fn eora(&mut self, data: u8) {
+		let res = self.A ^ data;
+		self.set_n_from(res);
+		self.set_z_from(res);
+		self.set_v(false);
+		self.A = res;
+	}
+
+	fn inc(&mut self, data: u8) -> u8 {
+		let (res, carry) = data.overflowing_add(1);
+		self.set_n_from(res);
+		self.set_z_from(res);
+		self.set_v(carry);
+		res
 	}
 
 	pub fn step(&mut self) -> crate::error::Result<()> {
-		let inst: Instruction = Instruction::try_from(self.mem[self.SP as usize])?;
-		let n = self.mem[self.SP.wrapping_add(1) as usize];
+		let inst: Instruction = Instruction::try_from(self.mem[self.PC as usize])?;
+		let n = self.mem[self.PC.wrapping_add(1) as usize];
 		match inst {
 			Instruction::ADCA(adr) => {
 				let rhs = match adr {
@@ -75,13 +162,15 @@ impl Flisp {
 					AndaAddr::nX => n.wrapping_add(self.X),
 					AndaAddr::nY => n.wrapping_add(self.Y),
 				};
-				self.anda(rhs);
+				self.A = self.and(rhs);
 			}
 			Instruction::ANDCC => {
 				let rhs = n;
 				self.CC &= rhs;
 			}
-			Instruction::ASLA => {}
+			Instruction::ASLA => {
+				self.A = self.asl(self.A);
+			}
 			Instruction::ASL(adr) => {
 				let idx = match adr {
 					AslAddr::Addr => n,
@@ -90,47 +179,331 @@ impl Flisp {
 					AslAddr::nY => n + self.Y,
 					AslAddr::AY => self.A + self.Y,
 					AslAddr::AX => self.A + self.X,
-				};
+				} as usize;
+				self.mem[idx] = self.asl(self.mem[idx]);
 			}
-			Instruction::ASRA => {}
-			Instruction::ASR(_) => {}
-			Instruction::BITA(_) => {}
-			Instruction::BLE => {}
-			Instruction::BLS => {}
-			Instruction::BLT => {}
-			Instruction::BMI => {}
-			Instruction::BNE => {}
-			Instruction::BPL => {}
-			Instruction::BRA => {}
-			Instruction::BSR => {}
-			Instruction::BVC => {}
-			Instruction::BVS => {}
-			Instruction::BCC => {}
-			Instruction::BCS => {}
-			Instruction::BEQ => {}
-			Instruction::BGE => {}
-			Instruction::BGT => {}
-			Instruction::BHI => {}
-			Instruction::CLRA => {}
-			Instruction::CLR(_) => {}
-			Instruction::CMPA(_) => {}
-			Instruction::CMPX(_) => {}
-			Instruction::CMPY(_) => {}
-			Instruction::CMPSP(_) => {}
-			Instruction::COMA => {}
-			Instruction::COM(_) => {}
-			Instruction::DECA => {}
-			Instruction::DEC(_) => {}
-			Instruction::EORA(_) => {}
-			Instruction::EXG(_) => {}
-			Instruction::INCA => {}
-			Instruction::INC(_) => {}
-			Instruction::JMP(_) => {}
-			Instruction::JSR(_) => {}
-			Instruction::LDA(_) => {}
-			Instruction::LDX(_) => {}
-			Instruction::LDY(_) => {}
-			Instruction::LDSP(_) => {}
+			Instruction::ASRA => {
+				self.A = self.asr(self.A);
+			}
+			Instruction::ASR(adr) => {
+				let idx = match adr {
+					AsrAddr::Addr => n,
+					AsrAddr::nSP => n + self.SP,
+					AsrAddr::nX => n + self.X,
+					AsrAddr::nY => n + self.Y,
+					AsrAddr::AY => self.A + self.Y,
+					AsrAddr::AX => self.A + self.X,
+				} as usize;
+				self.mem[idx] = self.asr(self.mem[idx]);
+			}
+			Instruction::BITA(adr) => {
+				let word = match adr {
+					BitaAddr::Data => n,
+					BitaAddr::Addr => self.mem[n as usize],
+					BitaAddr::nSP => self.mem[(n + self.SP) as usize],
+					BitaAddr::nX => self.mem[(n + self.X) as usize],
+					BitaAddr::nY => self.mem[(n + self.Y) as usize],
+				};
+				self.and(word);
+			}
+			Instruction::BLE => {
+				if (self.get_n() ^ self.get_v()) || self.get_z() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BLS => {
+				if self.get_c() || self.get_z() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BLT => {
+				if self.get_n() ^ self.get_v() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BMI => {
+				if self.get_n() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BNE => {
+				if !self.get_z() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BPL => {
+				if self.get_n() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BRA => {
+				self.PC = self.PC.wrapping_add(n);
+			}
+			Instruction::BSR => {
+				//Ordering?
+				self.SP = self.SP.wrapping_sub(1);
+				self.mem[self.SP as usize] = self.PC;
+				self.PC = self.PC.wrapping_add(n);
+			}
+			Instruction::BVC => {
+				if !self.get_v() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BVS => {
+				if self.get_v() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BCC => {
+				if !self.get_c() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BCS => {
+				if self.get_c() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BEQ => {
+				if self.get_z() {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BGE => {
+				if !(self.get_n() ^ self.get_v()) {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BGT => {
+				if !((self.get_n() ^ self.get_v()) || self.get_z()) {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::BHI => {
+				if !(self.get_c() || self.get_z()) {
+					self.PC = self.PC.wrapping_add(n);
+				}
+			}
+			Instruction::CLRA => {
+				self.clr();
+				self.A = 0;
+			}
+			Instruction::CLR(adr) => {
+				let idx = match adr {
+					ClrAddr::Addr => n,
+					ClrAddr::nSP => n + self.SP,
+					ClrAddr::nX => n + self.X,
+					ClrAddr::nY => n + self.Y,
+					ClrAddr::AY => self.A + self.Y,
+					ClrAddr::AX => self.A + self.X,
+				} as usize;
+				self.clr();
+				self.mem[idx] = 0;
+			}
+			Instruction::CMPA(adr) => {
+				let rhs = match adr {
+					CmpaAddr::Addr => self.mem[n as usize],
+					CmpaAddr::Data => n,
+					CmpaAddr::nSP => n.wrapping_add(self.SP),
+					CmpaAddr::nX => n.wrapping_add(self.X),
+					CmpaAddr::nY => n.wrapping_add(self.Y),
+				};
+				self.cmp(self.A, rhs);
+			}
+			Instruction::CMPX(adr) => {
+				let rhs = match adr {
+					CmpxAddr::Addr => self.mem[n as usize],
+					CmpxAddr::Data => n,
+					CmpxAddr::nSP => n.wrapping_add(self.SP),
+				};
+				self.cmp(self.X, rhs);
+			}
+			Instruction::CMPY(adr) => {
+				let rhs = match adr {
+					CmpyAddr::Addr => self.mem[n as usize],
+					CmpyAddr::Data => n,
+					CmpyAddr::nSP => n.wrapping_add(self.SP),
+				};
+				self.cmp(self.Y, rhs);
+			}
+			Instruction::CMPSP(adr) => {
+				let rhs = match adr {
+					CmpspAddr::Data => n,
+					CmpspAddr::Addr => self.mem[n as usize],
+				};
+				self.cmp(self.SP, rhs);
+			}
+			Instruction::COMA => {
+				self.A = self.com(self.A);
+			}
+			Instruction::COM(adr) => {
+				let idx = match adr {
+					ComAddr::Addr => n,
+					ComAddr::nSP => n + self.SP,
+					ComAddr::nX => n + self.X,
+					ComAddr::nY => n + self.Y,
+					ComAddr::AY => self.A + self.Y,
+					ComAddr::AX => self.A + self.X,
+				} as usize;
+				self.mem[idx] = self.com(self.mem[idx]);
+			}
+			Instruction::DECA => {
+				self.A = self.dec(self.A);
+			}
+			Instruction::DEC(adr) => {
+				let idx = match adr {
+					DecAddr::Addr => n,
+					DecAddr::nSP => n + self.SP,
+					DecAddr::nX => n + self.X,
+					DecAddr::nY => n + self.Y,
+					DecAddr::AY => self.A + self.Y,
+					DecAddr::AX => self.A + self.X,
+				} as usize;
+				self.mem[idx] = self.dec(self.mem[idx]);
+			}
+			Instruction::EORA(adr) => {
+				let rhs = match adr {
+					EoraAddr::Data => n,
+					EoraAddr::Addr => self.mem[n as usize],
+					EoraAddr::nSP => self.mem[(n + self.SP) as usize],
+					EoraAddr::nX => self.mem[(n + self.X) as usize],
+					EoraAddr::nY => self.mem[(n + self.Y) as usize],
+				};
+				self.eora(rhs);
+			}
+			Instruction::EXG(adr) => match adr {
+				ExgAddr::XY => mem::swap(&mut self.X, &mut self.Y),
+				ExgAddr::ACC => mem::swap(&mut self.A, &mut self.CC),
+				ExgAddr::XSP => mem::swap(&mut self.X, &mut self.SP),
+				ExgAddr::YSP => mem::swap(&mut self.Y, &mut self.SP),
+			},
+			Instruction::INCA => {
+				self.A = self.inc(self.A);
+			}
+			Instruction::INC(adr) => {
+				let idx = match adr {
+					IncAddr::Addr => n,
+					IncAddr::nSP => n + self.SP,
+					IncAddr::nX => n + self.X,
+					IncAddr::nY => n + self.Y,
+					IncAddr::AY => self.A + self.Y,
+					IncAddr::AX => self.A + self.X,
+				} as usize;
+				self.mem[idx] = self.inc(self.mem[idx]);
+			}
+			Instruction::JMP(adr) => {
+				let target = match adr {
+					JmpAddr::Addr => n,
+					JmpAddr::nX => n + self.X,
+					JmpAddr::nY => n + self.Y,
+					JmpAddr::AY => self.A + self.Y,
+					JmpAddr::AX => self.A + self.X,
+				};
+				self.PC = target;
+			}
+			Instruction::JSR(adr) => {
+				let target = match adr {
+					JsrAddr::Addr => n,
+					JsrAddr::nX => n + self.X,
+					JsrAddr::nY => n + self.Y,
+					JsrAddr::AY => self.A + self.Y,
+					JsrAddr::AX => self.A + self.X,
+				};
+				self.SP = self.SP.wrapping_sub(1);
+				self.mem[self.SP as usize] = self.PC;
+				self.PC = target;
+			}
+			Instruction::LDA(adr) => {
+				let data = match adr {
+					LdaAddr::Data => n,
+					LdaAddr::Addr => self.mem[n as usize],
+					LdaAddr::nSP => self.mem[(n + self.SP) as usize],
+					LdaAddr::nX => self.mem[(n + self.X) as usize],
+					LdaAddr::AX => self.mem[(self.A + self.X) as usize],
+					LdaAddr::Xplus => {
+						let x = self.X;
+						self.X = self.X.wrapping_add(1);
+						self.mem[x as usize]
+					}
+					LdaAddr::Xminus => {
+						let x = self.X;
+						self.X = self.X.wrapping_sub(1);
+						self.mem[x as usize]
+					}
+					LdaAddr::plusX => {
+						self.X = self.X.wrapping_add(1);
+						self.mem[self.X as usize]
+					}
+					LdaAddr::minusX => {
+						self.X = self.X.wrapping_sub(1);
+						self.mem[self.X as usize]
+					}
+					LdaAddr::nY => self.mem[(n + self.Y) as usize],
+					LdaAddr::AY => self.mem[(self.A + self.Y) as usize],
+					LdaAddr::Yplus => {
+						let y = self.Y;
+						self.Y = self.Y.wrapping_add(1);
+						self.mem[y as usize]
+					}
+					LdaAddr::Yminus => {
+						let y = self.Y;
+						self.Y = self.Y.wrapping_sub(1);
+						self.mem[y as usize]
+					}
+					LdaAddr::plusY => {
+						self.Y = self.Y.wrapping_add(1);
+						self.mem[self.Y as usize]
+					}
+					LdaAddr::minusY => {
+						self.Y = self.Y.wrapping_sub(1);
+						self.mem[self.Y as usize]
+					}
+				};
+				self.set_n_from(data);
+				self.set_z_from(data);
+				self.set_v(false);
+				self.A = data;
+			}
+			Instruction::LDX(adr) => {
+				let data = match adr {
+					LdxAddr::Data => n,
+					LdxAddr::Addr => self.mem[n as usize],
+					LdxAddr::nSP => self.mem[(n + self.SP) as usize],
+					LdxAddr::nX => self.mem[(n + self.X) as usize],
+					LdxAddr::nY => self.mem[(n + self.Y) as usize],
+				};
+				self.set_n_from(data);
+				self.set_z_from(data);
+				self.set_v(false);
+				self.A = data;
+			}
+			Instruction::LDY(adr) => {
+				let data = match adr {
+					LdyAddr::Data => n,
+					LdyAddr::Addr => self.mem[n as usize],
+					LdyAddr::nSP => self.mem[(n + self.SP) as usize],
+					LdyAddr::nX => self.mem[(n + self.X) as usize],
+					LdyAddr::nY => self.mem[(n + self.Y) as usize],
+				};
+				self.set_n_from(data);
+				self.set_z_from(data);
+				self.set_v(false);
+				self.A = data;
+			}
+			Instruction::LDSP(adr) => {
+				let data = match adr {
+					LdspAddr::Data => n,
+					LdspAddr::Addr => self.mem[n as usize],
+					LdspAddr::nSP => self.mem[(n + self.SP) as usize],
+					LdspAddr::nX => self.mem[(n + self.X) as usize],
+					LdspAddr::nY => self.mem[(n + self.Y) as usize],
+				};
+				self.set_n_from(data);
+				self.set_z_from(data);
+				self.set_v(false);
+				self.A = data;
+			}
 			Instruction::LEAX(_) => {}
 			Instruction::LEAY(_) => {}
 			Instruction::LEASP(_) => {}
@@ -165,7 +538,7 @@ impl Flisp {
 			Instruction::TSTA => {}
 			Instruction::TST(_) => {}
 		}
-		self.SP += 1;
+		self.PC = self.PC.wrapping_add(1);
 		Ok(())
 	}
 }
@@ -179,7 +552,8 @@ impl FromStr for Flisp {
 			Y: 0,
 			X: 0,
 			CC: 0,
-			SP: 0xFF,
+			SP: 0,
+			PC: 0xFF,
 			mem: [0; 256],
 		};
 
@@ -202,7 +576,7 @@ impl FromStr for Flisp {
 			flisp.mem[adr as usize] = val;
 		}
 
-		flisp.SP = flisp.mem[255];
+		flisp.PC = flisp.mem[255];
 
 		Ok(flisp)
 	}
