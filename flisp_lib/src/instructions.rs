@@ -397,7 +397,10 @@ impl TryFrom<u8> for Instruction {
 			0x79 => Instruction::TST(TstAddr::nY),
 			0x89 => Instruction::TST(TstAddr::AY),
 
-			_ => return Err(FlispError::InvalidOpCode(line!())),
+			_ => {
+				dbg!(value);
+				return Err(FlispError::InvalidOpCode(line!()));
+			}
 		};
 		Ok(res)
 	}
