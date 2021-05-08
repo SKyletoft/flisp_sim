@@ -1,11 +1,14 @@
-use std::io;
+use anyhow::Result;
+use crossterm::{cursor, event, execute, ExecutableCommand};
+use flisp_lib::processor::Flisp;
+use std::{fmt::Write as fmtWrite, io, time::Duration};
 use tui::{
 	backend::CrosstermBackend,
 	layout::{Constraint, Direction, Layout},
-	text::{Span, Spans},
-	widgets::{Block, Borders, Paragraph, Wrap},
+	text::Span,
+	widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+	Terminal,
 };
-use tui::{layout::Rect, Terminal};
 
 const MEM_SLICE: [u8; 256] = [
 	0x02, 0x03, 0x05, 0x07, 0x0B, 0x0D, 0x11, 0x13, 0x17, 0x1D, 0x1F, 0x25, 0x29, 0x2B, 0x2F, 0x35,
@@ -26,63 +29,164 @@ const MEM_SLICE: [u8; 256] = [
 	0x00, 0x00, 0x00, 0x01, 0x7F, 0x50, 0x71, 0x6E, 0x1E, 0x81, 0x9F, 0x00, 0x00, 0x00, 0x00, 0x9B,
 ];
 
-fn format_line(slice: &[u8]) -> String {
-	format!("{:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}\n",
-	slice[0],
-	slice[1],
-	slice[2],
-	slice[3],
-	slice[4],
-	slice[5],
-	slice[6],
-	slice[7],
-	slice[8],
-	slice[9],
-	slice[10],
-	slice[11],
-	slice[12],
-	slice[13],
-	slice[14],
-	slice[15],
-	)
+fn write_mem(mem: &[u8; 256], out: &mut String) -> Result<()> {
+	out.clear();
+	out.reserve(256 * 3);
+
+	for val in mem.iter() {
+		write!(out, "{:02X} ", val)?;
+	}
+
+	Ok(())
 }
 
-fn main() -> Result<(), io::Error> {
+fn main() -> Result<()> {
+	let flisp = Flisp {
+		A: 0,
+		X: 0,
+		Y: 0,
+		SP: 0,
+		CC: 0,
+		PC: 0xFF,
+		mem: MEM_SLICE,
+	};
+
 	let stdout = io::stdout();
 	let backend = CrosstermBackend::new(stdout);
 	let mut terminal = Terminal::new(backend)?;
+	crossterm::terminal::enable_raw_mode()?;
+
+	let mut memory_text_buffer = String::new();
+	let mut register_a_buffer = String::new();
+	let mut register_x_buffer = String::new();
+	let mut register_y_buffer = String::new();
+	let mut register_pc_buffer = String::new();
+	let mut register_sp_buffer = String::new();
+	let mut register_cc_buffer = String::new();
 
 	loop {
+		register_a_buffer.clear();
+		register_x_buffer.clear();
+		register_y_buffer.clear();
+		register_pc_buffer.clear();
+		register_sp_buffer.clear();
+		register_cc_buffer.clear();
+
+		write_mem(&MEM_SLICE, &mut memory_text_buffer)?;
+		write!(&mut register_a_buffer, "0x{:02X}", flisp.A)?;
+		write!(&mut register_x_buffer, "0x{:02X}", flisp.X)?;
+		write!(&mut register_y_buffer, "0x{:02X}", flisp.Y)?;
+		write!(&mut register_pc_buffer, "0x{:02X}", flisp.PC)?;
+		write!(&mut register_sp_buffer, "0x{:02X}", flisp.SP)?;
+		write!(&mut register_cc_buffer, "0x{:02X}", flisp.CC)?;
+
 		terminal.draw(|f| {
-			let chunks = Layout::default()
-				.direction(Direction::Horizontal)
+			let control_split = Layout::default()
+				.direction(Direction::Vertical)
 				.margin(1)
+				.constraints([
+					Constraint::Min(18),
+					Constraint::Min(f.size().height.saturating_sub(23)),
+					Constraint::Min(3),
+				])
+				.split(f.size());
+			let ui_split = Layout::default()
+				.direction(Direction::Horizontal)
 				.constraints(
 					[
 						Constraint::Min(3 * 16 + 1),
-						Constraint::Percentage(50),
-						Constraint::Percentage(30),
+						Constraint::Min(10),
+						Constraint::Min(20),
+						Constraint::Min(f.size().width.saturating_sub(3 * 16 + 31)),
 					]
 					.as_ref(),
 				)
-				.split(f.size());
-			let block = Block::default().title("Block 2").borders(Borders::ALL);
-			let string_lines = (0..16)
-				.map(|idx| &MEM_SLICE[idx * 16..(idx + 1) * 16])
-				.map(format_line)
-				.collect::<Vec<_>>();
-			let lines = Spans::from(
-				string_lines
-					.iter()
-					.map(|line| Span::from(line.as_str()))
-					.collect::<Vec<_>>(),
+				.split(control_split[0]);
+			let register_split = Layout::default()
+				.direction(Direction::Vertical)
+				.constraints(
+					[
+						Constraint::Min(3),
+						Constraint::Min(3),
+						Constraint::Min(3),
+						Constraint::Min(3),
+						Constraint::Min(3),
+						Constraint::Min(3),
+					]
+					.as_ref(),
+				)
+				.split(ui_split[1]);
+
+			let memory_paragraph = Paragraph::new(Span::raw(&memory_text_buffer))
+				.block(
+					Block::default()
+						.title("Memory")
+						.borders(Borders::ALL)
+						.border_type(BorderType::Rounded),
+				)
+				.wrap(Wrap { trim: true });
+			f.render_widget(memory_paragraph, ui_split[0]);
+
+			let title_text: [(&str, &str); 6] = [
+				("A", &register_a_buffer),
+				("X", &register_x_buffer),
+				("Y", &register_y_buffer),
+				("CC", &register_cc_buffer),
+				("SP", &register_sp_buffer),
+				("PC", &register_pc_buffer),
+			];
+			for (idx, (title, text)) in title_text.iter().cloned().enumerate() {
+				f.render_widget(
+					Paragraph::new(Span::raw(text)).block(
+						Block::default()
+							.borders(Borders::ALL)
+							.border_type(BorderType::Rounded)
+							.title(title),
+					),
+					register_split[idx],
+				);
+			}
+
+			let dis_asm_paragraph = Paragraph::new(Span::raw("")).block(
+				Block::default()
+					.borders(Borders::ALL)
+					.border_type(BorderType::Rounded)
+					.title("Disassembly"),
 			);
-			let paragraph =
-				Paragraph::new(lines).block(Block::default().title("Memory").borders(Borders::ALL));
-			f.render_widget(paragraph, chunks[0]);
-			f.render_widget(block, chunks[1]);
+			f.render_widget(dis_asm_paragraph, ui_split[2]);
+
+			let controls_paragraph = Paragraph::new(Span::raw(
+				"Step: [H]    Run: [J]    Faster: [K]    Slower: [L]    Command: [:]",
+			))
+			.block(
+				Block::default()
+					.borders(Borders::ALL)
+					.border_type(BorderType::Rounded)
+					.title("Controls"),
+			);
+			f.render_widget(controls_paragraph, control_split[2]);
 		})?;
+
+		if event::poll(Duration::from_millis(50000))? {
+			if let event::Event::Key(key) = event::read()? {
+				match key.code {
+					event::KeyCode::Char(c) => match c {
+						'H' | 'J' | 'K' | 'L' => {}
+						':' => break,
+						_ => {}
+					},
+					event::KeyCode::Esc => {
+						crossterm::terminal::disable_raw_mode()?;
+						return Ok(());
+					}
+					_ => {}
+				}
+			}
+		}
 	}
 
+	println!("Command started?");
+
+	crossterm::terminal::disable_raw_mode()?;
 	Ok(())
 }

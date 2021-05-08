@@ -5,14 +5,14 @@ use crate::*;
 #[allow(non_snake_case, non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Flisp {
-	A: u8,
-	Y: u8,
-	X: u8,
+	pub A: u8,
+	pub Y: u8,
+	pub X: u8,
 	/// INZVC
-	CC: u8,
-	SP: u8,
-	PC: u8,
-	mem: [u8; 256],
+	pub CC: u8,
+	pub SP: u8,
+	pub PC: u8,
+	pub mem: [u8; 256],
 }
 
 impl Flisp {
@@ -835,7 +835,11 @@ impl Flisp {
 				self.tst(self.mem[idx])
 			}
 		}
-		self.PC = self.PC.wrapping_add(1);
+		if self.PC == 0xFF {
+			self.PC = self.mem[0xFF]
+		} else {
+			self.PC = self.PC.wrapping_add(1);
+		}
 		Ok(())
 	}
 }
@@ -876,6 +880,20 @@ impl FromStr for Flisp {
 		flisp.PC = flisp.mem[255];
 
 		Ok(flisp)
+	}
+}
+
+impl Default for Flisp {
+	fn default() -> Self {
+		Flisp {
+			A: 0,
+			Y: 0,
+			X: 0,
+			CC: 0,
+			SP: 0,
+			PC: 0xFF,
+			mem: [0; 256],
+		}
 	}
 }
 
