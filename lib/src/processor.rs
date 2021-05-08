@@ -193,8 +193,13 @@ impl Flisp {
 		self.set_c(false);
 	}
 
-	pub fn step(&mut self) -> error::Result<()> {
-		let inst: Instruction = Instruction::try_from(self.mem[self.PC as usize])?;
+	pub fn step(&mut self) {
+		let inst = if let Ok(inst) = Instruction::try_from(self.mem[self.PC as usize]) {
+			inst
+		} else {
+			self.PC = self.mem[0xFD];
+			return;
+		};
 		let n = self.mem[self.PC.wrapping_add(1) as usize];
 		match inst {
 			Instruction::ADCA(adr) => {
@@ -840,7 +845,6 @@ impl Flisp {
 		} else {
 			self.PC = self.PC.wrapping_add(1);
 		}
-		Ok(())
 	}
 }
 
@@ -930,7 +934,7 @@ mod test {
 		assert_eq!(flisp.mem, starting_mem);
 
 		while flisp.SP != 0x9F {
-			flisp.step().unwrap();
+			flisp.step();
 		}
 
 		let ending_mem: [u8; 256] = [
