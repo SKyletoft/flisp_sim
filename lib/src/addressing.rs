@@ -1,3 +1,5 @@
+use crate::processor::Flisp;
+
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum LdaAddr {
@@ -69,96 +71,7 @@ pub enum LeaspAddr {
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum StxAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AX,
-	AY,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum StyAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum StspAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum AdcaAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum DecAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum IncAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum EoraAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum AddaAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum SubaAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum TstAddr {
+pub enum AddrTypeOne {
 	Addr,
 	nSP,
 	nX,
@@ -167,18 +80,22 @@ pub enum TstAddr {
 	AY,
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum AndaAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
+impl AddrTypeOne {
+	pub fn get_index(&self, flisp: &Flisp, n: u8) -> usize {
+		match self {
+			AddrTypeOne::Addr => n as usize,
+			AddrTypeOne::nSP => n.wrapping_add(flisp.SP) as usize,
+			AddrTypeOne::nX => n.wrapping_add(flisp.X) as usize,
+			AddrTypeOne::nY => n.wrapping_add(flisp.Y) as usize,
+			AddrTypeOne::AX => flisp.A.wrapping_add(flisp.X) as usize,
+			AddrTypeOne::AY => flisp.A.wrapping_add(flisp.Y) as usize,
+		}
+	}
 }
+
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum BitaAddr {
+pub enum AddrTypeTwo {
 	Data,
 	Addr,
 	nSP,
@@ -186,29 +103,21 @@ pub enum BitaAddr {
 	nY,
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum AslAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
+impl AddrTypeTwo {
+	pub fn get_value(&self, flisp: &Flisp, n: u8) -> u8 {
+		match self {
+			AddrTypeTwo::Data => n,
+			AddrTypeTwo::Addr => flisp.mem[n as usize],
+			AddrTypeTwo::nSP => flisp.mem[n.wrapping_add(flisp.SP) as usize],
+			AddrTypeTwo::nX => flisp.mem[n.wrapping_add(flisp.X) as usize],
+			AddrTypeTwo::nY => flisp.mem[n.wrapping_add(flisp.Y) as usize],
+		}
+	}
 }
+
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum LsrAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum ClrAddr {
+pub enum AddrTypeThree {
 	Addr,
 	nSP,
 	nX,
@@ -217,39 +126,35 @@ pub enum ClrAddr {
 	AX,
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum AsrAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
+impl AddrTypeThree {
+	pub fn get_index(&self, flisp: &Flisp, n: u8) -> usize {
+		match self {
+			AddrTypeThree::Addr => n as usize,
+			AddrTypeThree::nSP => n.wrapping_add(flisp.SP) as usize,
+			AddrTypeThree::nX => n.wrapping_add(flisp.X) as usize,
+			AddrTypeThree::nY => n.wrapping_add(flisp.Y) as usize,
+			AddrTypeThree::AY => flisp.A.wrapping_add(flisp.Y) as usize,
+			AddrTypeThree::AX => flisp.A.wrapping_add(flisp.X) as usize,
+		}
+	}
 }
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum CmpaAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum CmpxAddr {
+pub enum AddrTypeFour {
 	Data,
 	Addr,
 	nSP,
 }
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum CmpyAddr {
-	Data,
-	Addr,
-	nSP,
+
+impl AddrTypeFour {
+	pub fn get_value(&self, flisp: &Flisp, n: u8) -> u8 {
+		match self {
+			AddrTypeFour::Addr => flisp.mem[n as usize],
+			AddrTypeFour::Data => n,
+			AddrTypeFour::nSP => n.wrapping_add(flisp.SP),
+		}
+	}
 }
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -257,20 +162,10 @@ pub enum CmpspAddr {
 	Data,
 	Addr,
 }
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum ComAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
-}
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum JmpAddr {
+pub enum AddrTypeFive {
 	Addr,
 	nX,
 	nY,
@@ -278,93 +173,16 @@ pub enum JmpAddr {
 	AX,
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum JsrAddr {
-	Addr,
-	nX,
-	nY,
-	AY,
-	AX,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum LdxAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum LdyAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum LdspAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum NegAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum OraAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum RolAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
-}
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum RorAddr {
-	Addr,
-	nSP,
-	nX,
-	nY,
-	AY,
-	AX,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum SbcaAddr {
-	Data,
-	Addr,
-	nSP,
-	nX,
-	nY,
+impl AddrTypeFive {
+	pub fn get_target(&self, flisp: &Flisp, n: u8) -> u8 {
+		match self {
+			AddrTypeFive::Addr => n,
+			AddrTypeFive::nX => n.wrapping_add(flisp.X),
+			AddrTypeFive::nY => n.wrapping_add(flisp.Y),
+			AddrTypeFive::AY => flisp.A.wrapping_add(flisp.Y),
+			AddrTypeFive::AX => flisp.A.wrapping_add(flisp.X),
+		}
+	}
 }
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]

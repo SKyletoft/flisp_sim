@@ -1,4 +1,9 @@
-use std::{convert::TryFrom, mem, result, str::FromStr};
+use std::{
+	convert::{TryFrom, TryInto},
+	fmt::Write,
+	mem, result,
+	str::FromStr,
+};
 
 use crate::*;
 
@@ -203,33 +208,15 @@ impl Flisp {
 		let n = self.mem[self.PC.wrapping_add(1) as usize];
 		match inst {
 			Instruction::ADCA(adr) => {
-				let rhs = match adr {
-					AdcaAddr::Addr => self.mem[n as usize],
-					AdcaAddr::Data => n,
-					AdcaAddr::nSP => n.wrapping_add(self.SP),
-					AdcaAddr::nX => n.wrapping_add(self.X),
-					AdcaAddr::nY => n.wrapping_add(self.Y),
-				};
+				let rhs = adr.get_value(&self, n);
 				self.add(rhs + self.get_c() as u8);
 			}
 			Instruction::ADDA(adr) => {
-				let rhs = match adr {
-					AddaAddr::Addr => self.mem[n as usize],
-					AddaAddr::Data => n,
-					AddaAddr::nSP => n.wrapping_add(self.SP),
-					AddaAddr::nX => n.wrapping_add(self.X),
-					AddaAddr::nY => n.wrapping_add(self.Y),
-				};
+				let rhs = adr.get_value(&self, n);
 				self.add(rhs);
 			}
 			Instruction::ANDA(adr) => {
-				let rhs = match adr {
-					AndaAddr::Addr => self.mem[n as usize],
-					AndaAddr::Data => n,
-					AndaAddr::nSP => n.wrapping_add(self.SP),
-					AndaAddr::nX => n.wrapping_add(self.X),
-					AndaAddr::nY => n.wrapping_add(self.Y),
-				};
+				let rhs = adr.get_value(&self, n);
 				self.A = self.and(rhs);
 			}
 			Instruction::ANDCC => {
@@ -240,39 +227,19 @@ impl Flisp {
 				self.A = self.asl(self.A);
 			}
 			Instruction::ASL(adr) => {
-				let idx = match adr {
-					AslAddr::Addr => n,
-					AslAddr::nSP => n + self.SP,
-					AslAddr::nX => n + self.X,
-					AslAddr::nY => n + self.Y,
-					AslAddr::AY => self.A + self.Y,
-					AslAddr::AX => self.A + self.X,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.mem[idx] = self.asl(self.mem[idx]);
 			}
 			Instruction::ASRA => {
 				self.A = self.asr(self.A);
 			}
 			Instruction::ASR(adr) => {
-				let idx = match adr {
-					AsrAddr::Addr => n,
-					AsrAddr::nSP => n + self.SP,
-					AsrAddr::nX => n + self.X,
-					AsrAddr::nY => n + self.Y,
-					AsrAddr::AY => self.A + self.Y,
-					AsrAddr::AX => self.A + self.X,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.mem[idx] = self.asr(self.mem[idx]);
 			}
 			Instruction::BITA(adr) => {
-				let word = match adr {
-					BitaAddr::Data => n,
-					BitaAddr::Addr => self.mem[n as usize],
-					BitaAddr::nSP => self.mem[(n + self.SP) as usize],
-					BitaAddr::nX => self.mem[(n + self.X) as usize],
-					BitaAddr::nY => self.mem[(n + self.Y) as usize],
-				};
-				self.and(word);
+				let rhs = adr.get_value(&self, n);
+				self.and(rhs);
 			}
 			Instruction::BLE => {
 				if (self.get_n() ^ self.get_v()) || self.get_z() {
@@ -358,41 +325,20 @@ impl Flisp {
 				self.A = 0;
 			}
 			Instruction::CLR(adr) => {
-				let idx = match adr {
-					ClrAddr::Addr => n,
-					ClrAddr::nSP => n + self.SP,
-					ClrAddr::nX => n + self.X,
-					ClrAddr::nY => n + self.Y,
-					ClrAddr::AY => self.A + self.Y,
-					ClrAddr::AX => self.A + self.X,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.clr();
 				self.mem[idx] = 0;
 			}
 			Instruction::CMPA(adr) => {
-				let rhs = match adr {
-					CmpaAddr::Addr => self.mem[n as usize],
-					CmpaAddr::Data => n,
-					CmpaAddr::nSP => n.wrapping_add(self.SP),
-					CmpaAddr::nX => n.wrapping_add(self.X),
-					CmpaAddr::nY => n.wrapping_add(self.Y),
-				};
+				let rhs = adr.get_value(&self, n);
 				self.cmp(self.A, rhs);
 			}
 			Instruction::CMPX(adr) => {
-				let rhs = match adr {
-					CmpxAddr::Addr => self.mem[n as usize],
-					CmpxAddr::Data => n,
-					CmpxAddr::nSP => n.wrapping_add(self.SP),
-				};
+				let rhs = adr.get_value(&self, n);
 				self.cmp(self.X, rhs);
 			}
 			Instruction::CMPY(adr) => {
-				let rhs = match adr {
-					CmpyAddr::Addr => self.mem[n as usize],
-					CmpyAddr::Data => n,
-					CmpyAddr::nSP => n.wrapping_add(self.SP),
-				};
+				let rhs = adr.get_value(&self, n);
 				self.cmp(self.Y, rhs);
 			}
 			Instruction::CMPSP(adr) => {
@@ -406,38 +352,18 @@ impl Flisp {
 				self.A = self.com(self.A);
 			}
 			Instruction::COM(adr) => {
-				let idx = match adr {
-					ComAddr::Addr => n,
-					ComAddr::nSP => n + self.SP,
-					ComAddr::nX => n + self.X,
-					ComAddr::nY => n + self.Y,
-					ComAddr::AY => self.A + self.Y,
-					ComAddr::AX => self.A + self.X,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.mem[idx] = self.com(self.mem[idx]);
 			}
 			Instruction::DECA => {
 				self.A = self.dec(self.A);
 			}
 			Instruction::DEC(adr) => {
-				let idx = match adr {
-					DecAddr::Addr => n,
-					DecAddr::nSP => n + self.SP,
-					DecAddr::nX => n + self.X,
-					DecAddr::nY => n + self.Y,
-					DecAddr::AY => self.A + self.Y,
-					DecAddr::AX => self.A + self.X,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.mem[idx] = self.dec(self.mem[idx]);
 			}
 			Instruction::EORA(adr) => {
-				let rhs = match adr {
-					EoraAddr::Data => n,
-					EoraAddr::Addr => self.mem[n as usize],
-					EoraAddr::nSP => self.mem[(n + self.SP) as usize],
-					EoraAddr::nX => self.mem[(n + self.X) as usize],
-					EoraAddr::nY => self.mem[(n + self.Y) as usize],
-				};
+				let rhs = adr.get_value(&self, n);
 				self.eora(rhs);
 			}
 			Instruction::EXG(adr) => match adr {
@@ -450,34 +376,15 @@ impl Flisp {
 				self.A = self.inc(self.A);
 			}
 			Instruction::INC(adr) => {
-				let idx = match adr {
-					IncAddr::Addr => n,
-					IncAddr::nSP => n + self.SP,
-					IncAddr::nX => n + self.X,
-					IncAddr::nY => n + self.Y,
-					IncAddr::AY => self.A + self.Y,
-					IncAddr::AX => self.A + self.X,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.mem[idx] = self.inc(self.mem[idx]);
 			}
 			Instruction::JMP(adr) => {
-				let target = match adr {
-					JmpAddr::Addr => n,
-					JmpAddr::nX => n + self.X,
-					JmpAddr::nY => n + self.Y,
-					JmpAddr::AY => self.A + self.Y,
-					JmpAddr::AX => self.A + self.X,
-				};
+				let target = adr.get_target(&self, n);
 				self.PC = target;
 			}
 			Instruction::JSR(adr) => {
-				let target = match adr {
-					JsrAddr::Addr => n,
-					JsrAddr::nX => n + self.X,
-					JsrAddr::nY => n + self.Y,
-					JsrAddr::AY => self.A + self.Y,
-					JsrAddr::AX => self.A + self.X,
-				};
+				let target = adr.get_target(&self, n);
 				self.SP = self.SP.wrapping_sub(1);
 				self.mem[self.SP as usize] = self.PC;
 				self.PC = target;
@@ -534,43 +441,25 @@ impl Flisp {
 				self.A = data;
 			}
 			Instruction::LDX(adr) => {
-				let data = match adr {
-					LdxAddr::Data => n,
-					LdxAddr::Addr => self.mem[n as usize],
-					LdxAddr::nSP => self.mem[(n + self.SP) as usize],
-					LdxAddr::nX => self.mem[(n + self.X) as usize],
-					LdxAddr::nY => self.mem[(n + self.Y) as usize],
-				};
+				let data = adr.get_value(self, n);
 				self.set_n_from(data);
 				self.set_z_from(data);
 				self.set_v(false);
 				self.A = data;
 			}
 			Instruction::LDY(adr) => {
-				let data = match adr {
-					LdyAddr::Data => n,
-					LdyAddr::Addr => self.mem[n as usize],
-					LdyAddr::nSP => self.mem[(n + self.SP) as usize],
-					LdyAddr::nX => self.mem[(n + self.X) as usize],
-					LdyAddr::nY => self.mem[(n + self.Y) as usize],
-				};
-				self.set_n_from(data);
-				self.set_z_from(data);
+				let rhs = adr.get_value(&self, n);
+				self.set_n_from(rhs);
+				self.set_z_from(rhs);
 				self.set_v(false);
-				self.A = data;
+				self.A = rhs;
 			}
 			Instruction::LDSP(adr) => {
-				let data = match adr {
-					LdspAddr::Data => n,
-					LdspAddr::Addr => self.mem[n as usize],
-					LdspAddr::nSP => self.mem[(n + self.SP) as usize],
-					LdspAddr::nX => self.mem[(n + self.X) as usize],
-					LdspAddr::nY => self.mem[(n + self.Y) as usize],
-				};
-				self.set_n_from(data);
-				self.set_z_from(data);
+				let rhs = adr.get_value(&self, n);
+				self.set_n_from(rhs);
+				self.set_z_from(rhs);
 				self.set_v(false);
-				self.A = data;
+				self.A = rhs;
 			}
 			Instruction::LEAX(adr) => {
 				let res = match adr {
@@ -598,39 +487,19 @@ impl Flisp {
 				self.A = self.lsr(self.A);
 			}
 			Instruction::LSR(adr) => {
-				let idx = match adr {
-					LsrAddr::Addr => n,
-					LsrAddr::nSP => n + self.SP,
-					LsrAddr::nX => n + self.X,
-					LsrAddr::nY => n + self.Y,
-					LsrAddr::AY => self.A + self.Y,
-					LsrAddr::AX => self.A + self.X,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.mem[idx] = self.lsr(self.mem[idx]);
 			}
 			Instruction::NEGA => {
 				self.A = self.neg(self.A);
 			}
 			Instruction::NEG(adr) => {
-				let idx = match adr {
-					NegAddr::Addr => n,
-					NegAddr::nSP => n + self.SP,
-					NegAddr::nX => n + self.X,
-					NegAddr::nY => n + self.Y,
-					NegAddr::AY => self.A + self.Y,
-					NegAddr::AX => self.A + self.X,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.mem[idx] = self.neg(self.mem[idx]);
 			}
 			Instruction::NOP => {}
 			Instruction::ORA(adr) => {
-				let rhs = match adr {
-					OraAddr::Data => n,
-					OraAddr::Addr => self.mem[n as usize],
-					OraAddr::nSP => self.mem[(n + self.SP) as usize],
-					OraAddr::nX => self.mem[(n + self.X) as usize],
-					OraAddr::nY => self.mem[(n + self.Y) as usize],
-				};
+				let rhs = adr.get_value(&self, n);
 				self.A = self.or(rhs);
 			}
 			Instruction::ORCC => {
@@ -673,28 +542,14 @@ impl Flisp {
 				self.A = self.rol(self.A);
 			}
 			Instruction::ROL(adr) => {
-				let idx = match adr {
-					RolAddr::Addr => n,
-					RolAddr::nSP => n + self.SP,
-					RolAddr::nX => n + self.X,
-					RolAddr::nY => n + self.Y,
-					RolAddr::AY => self.A + self.Y,
-					RolAddr::AX => self.A + self.X,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.mem[idx] = self.rol(self.mem[idx]);
 			}
 			Instruction::RORA => {
 				self.A = self.ror(self.A);
 			}
 			Instruction::ROR(adr) => {
-				let idx = match adr {
-					RorAddr::Addr => n,
-					RorAddr::nSP => n + self.SP,
-					RorAddr::nX => n + self.X,
-					RorAddr::nY => n + self.Y,
-					RorAddr::AY => self.A + self.Y,
-					RorAddr::AX => self.A + self.X,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.mem[idx] = self.ror(self.mem[idx]);
 			}
 			Instruction::RTS => {
@@ -714,13 +569,7 @@ impl Flisp {
 				self.SP = self.SP.wrapping_add(1);
 			}
 			Instruction::SBCA(adr) => {
-				let rhs = match adr {
-					SbcaAddr::Data => n,
-					SbcaAddr::Addr => self.mem[n as usize],
-					SbcaAddr::nSP => self.mem[(n + self.SP) as usize],
-					SbcaAddr::nX => self.mem[(n + self.X) as usize],
-					SbcaAddr::nY => self.mem[(n + self.Y) as usize],
-				};
+				let rhs = adr.get_value(&self, n);
 				self.A = self.sub(rhs + self.get_c() as u8);
 			}
 			Instruction::STA(adr) => {
@@ -771,47 +620,20 @@ impl Flisp {
 				self.mem[idx] = self.A;
 			}
 			Instruction::STX(adr) => {
-				let idx = match adr {
-					StxAddr::Addr => n,
-					StxAddr::nSP => n + self.SP,
-					StxAddr::nX => n + self.X,
-					StxAddr::nY => n + self.Y,
-					StxAddr::AX => self.A + self.X,
-					StxAddr::AY => self.A + self.Y,
-				};
+				let idx = adr.get_index(&self, n);
 				self.mem[idx as usize] = self.X;
 			}
 			Instruction::STY(adr) => {
-				let idx = match adr {
-					StyAddr::Addr => n,
-					StyAddr::nSP => n + self.SP,
-					StyAddr::nX => n + self.X,
-					StyAddr::nY => n + self.Y,
-					StyAddr::AX => self.A + self.X,
-					StyAddr::AY => self.A + self.Y,
-				};
+				let idx = adr.get_index(&self, n);
 				self.mem[idx as usize] = self.Y;
 			}
 			Instruction::STSP(adr) => {
-				let idx = match adr {
-					StspAddr::Addr => n,
-					StspAddr::nSP => n + self.SP,
-					StspAddr::nX => n + self.X,
-					StspAddr::nY => n + self.Y,
-					StspAddr::AX => self.A + self.X,
-					StspAddr::AY => self.A + self.Y,
-				};
+				let idx = adr.get_index(&self, n);
 				self.mem[idx as usize] = self.SP;
 			}
 
 			Instruction::SUBA(adr) => {
-				let rhs = match adr {
-					SubaAddr::Data => n,
-					SubaAddr::Addr => self.mem[n as usize],
-					SubaAddr::nSP => self.mem[(n + self.SP) as usize],
-					SubaAddr::nX => self.mem[(n + self.X) as usize],
-					SubaAddr::nY => self.mem[(n + self.Y) as usize],
-				};
+				let rhs = adr.get_value(&self, n);
 				self.A = self.sub(rhs);
 			}
 
@@ -829,14 +651,7 @@ impl Flisp {
 				self.tst(self.A);
 			}
 			Instruction::TST(adr) => {
-				let idx = match adr {
-					TstAddr::Addr => n,
-					TstAddr::nSP => n + self.SP,
-					TstAddr::nX => n + self.X,
-					TstAddr::nY => n + self.Y,
-					TstAddr::AX => self.A + self.X,
-					TstAddr::AY => self.A + self.Y,
-				} as usize;
+				let idx = adr.get_index(&self, n);
 				self.tst(self.mem[idx])
 			}
 		}
