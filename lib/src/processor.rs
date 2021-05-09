@@ -661,6 +661,422 @@ impl Flisp {
 			self.PC = self.PC.wrapping_add(1);
 		}
 	}
+
+	//Prints line of disassembly to the out string and returns the index of the next instruction,
+	// taking instruction parametres into account
+	pub fn print_disassembly<T: Write>(&self, out: &mut T, idx: u8) -> Result<u8> {
+		let index = idx as usize;
+		let read: Result<Instruction> = self.mem[index].try_into();
+		let next = self.mem[idx.wrapping_add(1) as usize];
+		match read {
+			Ok(inst) => match inst {
+				Instruction::ADCA(adr) => {
+					write!(out, "ADCA\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::ADDA(adr) => {
+					write!(out, "ADDA\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::ANDA(adr) => {
+					write!(out, "ANDA\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::ANDCC => {
+					write!(out, "ANDCC\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::ASLA => {
+					write!(out, "ASLA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::ASL(adr) => {
+					write!(out, "ASL\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::ASRA => {
+					write!(out, "ASRA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::ASR(adr) => {
+					write!(out, "ASR\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::BITA(adr) => {
+					write!(out, "BITA\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BLE => {
+					write!(out, "BLE\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BLS => {
+					write!(out, "BLS\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BLT => {
+					write!(out, "BLT\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BMI => {
+					write!(out, "BMI\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BNE => {
+					write!(out, "BNE\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BPL => {
+					write!(out, "BPL\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BRA => {
+					write!(out, "BRA\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BSR => {
+					write!(out, "BSR\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BVC => {
+					write!(out, "BVC\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BVS => {
+					write!(out, "BVS\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BCC => {
+					write!(out, "BCC\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BCS => {
+					write!(out, "BCS\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BEQ => {
+					write!(out, "BEQ\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BGE => {
+					write!(out, "BGE\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BGT => {
+					write!(out, "BGT\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::BHI => {
+					write!(out, "BHI\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::CLRA => {
+					write!(out, "CLRA\t{:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::CLR(adr) => {
+					write!(out, "CLR\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::CMPA(adr) => {
+					write!(out, "CMPA\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::CMPX(adr) => {
+					write!(out, "CMPA\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::CMPY(adr) => {
+					write!(out, "CMPY\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::CMPSP(adr) => {
+					match adr {
+						CmpspAddr::Data => write!(out, "CMPSP\t#${:02X}", next)?,
+						CmpspAddr::Addr => write!(out, "CMPSP\t${:02X}", next)?,
+					}
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::COMA => {
+					write!(out, "COMA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::COM(adr) => {
+					write!(out, "COM\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::DECA => {
+					write!(out, "DECA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::DEC(adr) => {
+					write!(out, "DEC\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::EORA(adr) => {
+					write!(out, "EORA\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::EXG(adr) => {
+					match adr {
+						ExgAddr::XY => write!(out, "EXG\tX,Y")?,
+						ExgAddr::ACC => write!(out, "EXG\tA,CC")?,
+						ExgAddr::XSP => write!(out, "EXG\tX,SP")?,
+						ExgAddr::YSP => write!(out, "EXG\tY,SP")?,
+					}
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::INCA => {
+					write!(out, "INCA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::INC(adr) => {
+					write!(out, "INC\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::JMP(adr) => {
+					write!(out, "JMP\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::JSR(adr) => {
+					write!(out, "JSR\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::LDA(adr) => {
+					let (_, ret) = match adr {
+						LdaAddr::Data => (write!(out, "LDA\t#${:02X}", next)?, 2),
+						LdaAddr::Addr => (write!(out, "LDA\t${:02X}", next)?, 2),
+						LdaAddr::nSP => (write!(out, "LDA\t${:02X},SP", next)?, 2),
+						LdaAddr::nX => (write!(out, "LDA\t${:02X},X", next)?, 2),
+						LdaAddr::AX => (write!(out, "LDA\tA,Y")?, 1),
+						LdaAddr::Xplus => (write!(out, "LDA\tX+")?, 1),
+						LdaAddr::Xminus => (write!(out, "LDA\tX-")?, 1),
+						LdaAddr::plusX => (write!(out, "LDA\t+X")?, 1),
+						LdaAddr::minusX => (write!(out, "LDA\t-X")?, 1),
+						LdaAddr::nY => (write!(out, "LDA\t${:02X},Y", next)?, 2),
+						LdaAddr::AY => (write!(out, "LDA\tA,Y")?, 1),
+						LdaAddr::Yplus => (write!(out, "LDA\tY+")?, 1),
+						LdaAddr::Yminus => (write!(out, "LDA\tY-")?, 1),
+						LdaAddr::plusY => (write!(out, "LDA\t+Y")?, 1),
+						LdaAddr::minusY => (write!(out, "LDA\t-Y")?, 1),
+					};
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::LDX(adr) => {
+					write!(out, "LDX\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::LDY(adr) => {
+					write!(out, "LDY\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::LDSP(adr) => {
+					write!(out, "LDSP\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::LEAX(adr) => {
+					match adr {
+						LeaxAddr::nX => write!(out, "LEAX\t${:02X},X", next)?,
+						LeaxAddr::nSP => write!(out, "LEAX\t${:02X},SP", next)?,
+					}
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::LEAY(adr) => {
+					match adr {
+						LeayAddr::nY => write!(out, "LEAY\t${:02X},Y", next)?,
+						LeayAddr::nSP => write!(out, "LEAY\t${:02X},SP", next)?,
+					}
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::LEASP(adr) => {
+					match adr {
+						LeaspAddr::nX => write!(out, "LEASP\t${:02X},X", next)?,
+						LeaspAddr::nY => write!(out, "LEASP\t${:02X},Y", next)?,
+						LeaspAddr::nSP => write!(out, "LEASP\t${:02X},SP", next)?,
+					}
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::LSRA => {
+					write!(out, "LSRA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::LSR(adr) => {
+					write!(out, "LSR\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::NEGA => {
+					write!(out, "NEGA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::NEG(adr) => {
+					write!(out, "NEG\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::NOP => {
+					write!(out, "NOP")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::ORA(adr) => {
+					write!(out, "ORA\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::ORCC => {
+					write!(out, "ORCC #${:02X}", next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::PSHA => {
+					write!(out, "PSHA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::PSHX => {
+					write!(out, "PSHX")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::PSHY => {
+					write!(out, "PSHY")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::PSHCC => {
+					write!(out, "PSHCC")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::PULA => {
+					write!(out, "PULA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::PULX => {
+					write!(out, "PULX")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::PULY => {
+					write!(out, "PULY")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::PULCC => {
+					write!(out, "PULCC")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::ROLA => {
+					write!(out, "ROLA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::ROL(adr) => {
+					write!(out, "ROL\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::RORA => {
+					write!(out, "RORA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::ROR(adr) => {
+					write!(out, "ROR\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::RTS => {
+					write!(out, "RTS")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::RTI => {
+					write!(out, "RTI")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::SBCA(adr) => {
+					write!(out, "SBCA\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::STA(adr) => {
+					let (_, ret) = match adr {
+						StaAddr::Addr => (write!(out, "STA\t${:02X}", next)?, 2),
+						StaAddr::nSP => (write!(out, "STA\t${:02X},SP", next)?, 2),
+						StaAddr::nX => (write!(out, "STA\t${:02X},X", next)?, 2),
+						StaAddr::AX => (write!(out, "STA\tA,Y")?, 1),
+						StaAddr::Xplus => (write!(out, "STA\tX+")?, 1),
+						StaAddr::Xminus => (write!(out, "STA\tX-")?, 1),
+						StaAddr::plusX => (write!(out, "STA\t+X")?, 1),
+						StaAddr::minusX => (write!(out, "STA\t-X")?, 1),
+						StaAddr::nY => (write!(out, "STA\t${:02X},Y", next)?, 2),
+						StaAddr::AY => (write!(out, "STA\tA,Y")?, 1),
+						StaAddr::Yplus => (write!(out, "STA\tY+")?, 1),
+						StaAddr::Yminus => (write!(out, "STA\tY-")?, 1),
+						StaAddr::plusY => (write!(out, "STA\t+Y")?, 1),
+						StaAddr::minusY => (write!(out, "STA\t-Y")?, 1),
+					};
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::STX(adr) => {
+					write!(out, "STX\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::STY(adr) => {
+					write!(out, "STY\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::STSP(adr) => {
+					write!(out, "STSP\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+				Instruction::SUBA(adr) => {
+					write!(out, "SUBA\t")?;
+					adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(2))
+				}
+				Instruction::TFR(adr) => {
+					match adr {
+						TfrAddr::ACC => write!(out, "TFR\tA,CC")?,
+						TfrAddr::CCA => write!(out, "TFR\tCC,A")?,
+						TfrAddr::XY => write!(out, "TFR\tX,Y")?,
+						TfrAddr::YX => write!(out, "TFR\tY,X")?,
+						TfrAddr::XSP => write!(out, "TFR\tX,SP")?,
+						TfrAddr::SPX => write!(out, "TFR\tSP,X")?,
+						TfrAddr::YSP => write!(out, "TFR\tY,SP")?,
+						TfrAddr::SPY => write!(out, "TFR\tSP,Y")?,
+					}
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::TSTA => {
+					write!(out, "TSTA")?;
+					Ok(idx.wrapping_add(1))
+				}
+				Instruction::TST(adr) => {
+					write!(out, "TST\t")?;
+					let ret = adr.write_with_next(out, next)?;
+					Ok(idx.wrapping_add(ret))
+				}
+			},
+			Err(_) => {
+				write!(out, "\tFCB\t${:02X}", self.mem[index])?;
+				Ok(idx.wrapping_add(1))
+			}
+		}
+	}
 }
 
 impl FromStr for Flisp {
