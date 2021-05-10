@@ -6,7 +6,7 @@ use tui::{
 	backend::CrosstermBackend,
 	layout::{Constraint, Direction, Layout},
 	text::Span,
-	widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+	widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Row, Table, Wrap},
 	Terminal,
 };
 
@@ -33,8 +33,11 @@ fn write_mem(mem: &[u8; 256], out: &mut String) -> Result<()> {
 	out.clear();
 	out.reserve(256 * 3);
 
-	for val in mem.iter() {
-		write!(out, "{:02X} ", val)?;
+	for line in mem.chunks(16) {
+		for val in line.iter() {
+			write!(out, "{:02X} ", val)?;
+		}
+		out.push('\n');
 	}
 
 	Ok(())
@@ -64,6 +67,8 @@ fn main() -> Result<()> {
 	let mut register_sp_buffer = String::new();
 	let mut register_cc_buffer = String::new();
 
+	let mut dis_asm_buffer = String::new();
+
 	loop {
 		register_a_buffer.clear();
 		register_x_buffer.clear();
@@ -72,13 +77,27 @@ fn main() -> Result<()> {
 		register_sp_buffer.clear();
 		register_cc_buffer.clear();
 
-		write_mem(&MEM_SLICE, &mut memory_text_buffer)?;
+		write_mem(&flisp.mem, &mut memory_text_buffer)?;
 		write!(&mut register_a_buffer, "0x{:02X}", flisp.A)?;
 		write!(&mut register_x_buffer, "0x{:02X}", flisp.X)?;
 		write!(&mut register_y_buffer, "0x{:02X}", flisp.Y)?;
 		write!(&mut register_pc_buffer, "0x{:02X}", flisp.PC)?;
 		write!(&mut register_sp_buffer, "0x{:02X}", flisp.SP)?;
 		write!(&mut register_cc_buffer, "0x{:02X}", flisp.CC)?;
+
+		let mut idx = 0;
+		loop {
+			let next = flisp.print_disassembly(&mut dis_asm_buffer, idx)?;
+			dis_asm_buffer.push('\n');
+			if next < idx {
+				break;
+			}
+			idx = next;
+		}
+		let items = dis_asm_buffer
+			.lines()
+			.map(ListItem::new)
+			.collect::<Vec<_>>();
 
 		terminal.draw(|f| {
 			let control_split = Layout::default()
@@ -117,15 +136,20 @@ fn main() -> Result<()> {
 				)
 				.split(ui_split[1]);
 
-			let memory_paragraph = Paragraph::new(Span::raw(&memory_text_buffer))
-				.block(
-					Block::default()
-						.title("Memory")
-						.borders(Borders::ALL)
-						.border_type(BorderType::Rounded),
-				)
-				.wrap(Wrap { trim: true });
-			f.render_widget(memory_paragraph, ui_split[0]);
+			let widths = vec![Constraint::Min(2); 16];
+			let memory_table = Table::new(
+				memory_text_buffer
+					.lines()
+					.map(|line| Row::new(line.trim().split_ascii_whitespace())),
+			)
+			.block(
+				Block::default()
+					.title("Memory")
+					.borders(Borders::ALL)
+					.border_type(BorderType::Rounded),
+			)
+			.widths(&widths);
+			f.render_widget(memory_table, ui_split[0]);
 
 			let title_text: [(&str, &str); 6] = [
 				("A", &register_a_buffer),
@@ -147,13 +171,13 @@ fn main() -> Result<()> {
 				);
 			}
 
-			let dis_asm_paragraph = Paragraph::new(Span::raw("")).block(
+			let dis_asm_list = List::new(items).block(
 				Block::default()
 					.borders(Borders::ALL)
 					.border_type(BorderType::Rounded)
 					.title("Disassembly"),
 			);
-			f.render_widget(dis_asm_paragraph, ui_split[2]);
+			f.render_widget(dis_asm_list, ui_split[2]);
 
 			let controls_paragraph = Paragraph::new(Span::raw(
 				"Step: [H]    Run: [J]    Faster: [K]    Slower: [L]    Command: [:]",
