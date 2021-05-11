@@ -233,9 +233,9 @@ impl AddrTypeFive {
 
 	pub fn write_with_next<T: fmt::Write>(&self, buf: &mut T, next: u8) -> Result<u8> {
 		let (_, ret) = match self {
-			AddrTypeFive::Addr => (write!(buf, "{:02X}", next)?, 2),
-			AddrTypeFive::nX => (write!(buf, "{:02X},X", next)?, 2),
-			AddrTypeFive::nY => (write!(buf, "{:02X},Y", next)?, 2),
+			AddrTypeFive::Addr => (write!(buf, "${:02X}", next)?, 2),
+			AddrTypeFive::nX => (write!(buf, "${:02X},X", next)?, 2),
+			AddrTypeFive::nY => (write!(buf, "${:02X},Y", next)?, 2),
 			AddrTypeFive::AY => (write!(buf, "A,Y")?, 1),
 			AddrTypeFive::AX => (write!(buf, "A,X")?, 1),
 		};

@@ -445,41 +445,41 @@ impl Flisp {
 				self.set_n_from(data);
 				self.set_z_from(data);
 				self.set_v(false);
-				self.A = data;
+				self.X = data;
 			}
 			Instruction::LDY(adr) => {
 				let rhs = adr.get_value(&self, n);
 				self.set_n_from(rhs);
 				self.set_z_from(rhs);
 				self.set_v(false);
-				self.A = rhs;
+				self.Y = rhs;
 			}
 			Instruction::LDSP(adr) => {
 				let rhs = adr.get_value(&self, n);
 				self.set_n_from(rhs);
 				self.set_z_from(rhs);
 				self.set_v(false);
-				self.A = rhs;
+				self.SP = rhs;
 			}
 			Instruction::LEAX(adr) => {
 				let res = match adr {
-					LeaxAddr::nX => n + self.X,
-					LeaxAddr::nSP => n + self.SP,
+					LeaxAddr::nX => n.wrapping_add(self.X),
+					LeaxAddr::nSP => n.wrapping_add(self.SP),
 				};
 				self.X = res;
 			}
 			Instruction::LEAY(adr) => {
 				let res = match adr {
-					LeayAddr::nY => n + self.Y,
-					LeayAddr::nSP => n + self.SP,
+					LeayAddr::nY => n.wrapping_add(self.Y),
+					LeayAddr::nSP => n.wrapping_add(self.SP),
 				};
 				self.Y = res;
 			}
 			Instruction::LEASP(adr) => {
 				let res = match adr {
-					LeaspAddr::nX => n + self.X,
-					LeaspAddr::nY => n + self.Y,
-					LeaspAddr::nSP => n + self.SP,
+					LeaspAddr::nX => n.wrapping_add(self.X),
+					LeaspAddr::nY => n.wrapping_add(self.Y),
+					LeaspAddr::nSP => n.wrapping_add(self.SP),
 				};
 				self.SP = res;
 			}
@@ -658,7 +658,7 @@ impl Flisp {
 		if self.PC == 0xFF {
 			self.PC = self.mem[0xFF]
 		} else {
-			self.PC = self.PC.wrapping_add(1);
+			self.PC = self.PC.wrapping_add(inst.size());
 		}
 	}
 

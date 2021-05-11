@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::{collections::btree_set::Intersection, convert::TryFrom};
 
 use crate::*;
 
@@ -398,7 +398,6 @@ impl TryFrom<u8> for Instruction {
 			0x89 => Instruction::TST(AddrTypeOne::AY),
 
 			_ => {
-				dbg!(value);
 				return Err(FlispError::InvalidOpCode(line!()));
 			}
 		};
@@ -715,6 +714,128 @@ impl From<Instruction> for u8 {
 			Instruction::TST(AddrTypeOne::AX) => 0x69,
 			Instruction::TST(AddrTypeOne::nY) => 0x79,
 			Instruction::TST(AddrTypeOne::AY) => 0x89,
+		}
+	}
+}
+
+impl Instruction {
+	pub fn size(&self) -> u8 {
+		match self {
+			Instruction::ADCA(_)
+			| Instruction::ADDA(_)
+			| Instruction::ANDA(_)
+			| Instruction::ANDCC
+			| Instruction::BITA(_)
+			| Instruction::BLE
+			| Instruction::BLS
+			| Instruction::BLT
+			| Instruction::BMI
+			| Instruction::BNE
+			| Instruction::BPL
+			| Instruction::BRA
+			| Instruction::BSR
+			| Instruction::BVC
+			| Instruction::BVS
+			| Instruction::BCC
+			| Instruction::BCS
+			| Instruction::BEQ
+			| Instruction::BGE
+			| Instruction::BGT
+			| Instruction::BHI
+			| Instruction::CMPA(_)
+			| Instruction::CMPX(_)
+			| Instruction::CMPY(_)
+			| Instruction::CMPSP(_)
+			| Instruction::EORA(_)
+			| Instruction::JMP(_)
+			| Instruction::JSR(_)
+			| Instruction::LEAX(_)
+			| Instruction::LEAY(_)
+			| Instruction::LEASP(_)
+			| Instruction::ORA(_)
+			| Instruction::ORCC
+			| Instruction::SBCA(_)
+			| Instruction::SUBA(_)
+			| Instruction::LDX(_)
+			| Instruction::LDY(_)
+			| Instruction::LDSP(_) => 2,
+
+			Instruction::ASLA
+			| Instruction::ASRA
+			| Instruction::CLRA
+			| Instruction::COMA
+			| Instruction::DECA
+			| Instruction::EXG(_)
+			| Instruction::INCA
+			| Instruction::LSRA
+			| Instruction::NEGA
+			| Instruction::NOP
+			| Instruction::PSHA
+			| Instruction::PSHX
+			| Instruction::PSHY
+			| Instruction::PSHCC
+			| Instruction::PULA
+			| Instruction::PULX
+			| Instruction::PULY
+			| Instruction::PULCC
+			| Instruction::ROLA
+			| Instruction::RORA
+			| Instruction::RTS
+			| Instruction::RTI
+			| Instruction::TFR(_)
+			| Instruction::TSTA => 1,
+
+			Instruction::ASL(adr)
+			| Instruction::ASR(adr)
+			| Instruction::CLR(adr)
+			| Instruction::COM(adr)
+			| Instruction::DEC(adr)
+			| Instruction::INC(adr)
+			| Instruction::LSR(adr)
+			| Instruction::NEG(adr)
+			| Instruction::ROL(adr)
+			| Instruction::ROR(adr) => match adr {
+				AddrTypeThree::Addr
+				| AddrTypeThree::nSP
+				| AddrTypeThree::nX
+				| AddrTypeThree::nY => 2,
+				AddrTypeThree::AY | AddrTypeThree::AX => 1,
+			},
+
+			Instruction::STX(adr)
+			| Instruction::STY(adr)
+			| Instruction::STSP(adr)
+			| Instruction::TST(adr) => match adr {
+				AddrTypeOne::Addr | AddrTypeOne::nSP | AddrTypeOne::nX | AddrTypeOne::nY => 2,
+				AddrTypeOne::AX | AddrTypeOne::AY => 1,
+			},
+
+			Instruction::STA(adr) => match adr {
+				StaAddr::Addr | StaAddr::nSP | StaAddr::nX | StaAddr::nY => 2,
+				StaAddr::AX
+				| StaAddr::Xplus
+				| StaAddr::Xminus
+				| StaAddr::plusX
+				| StaAddr::minusX
+				| StaAddr::AY
+				| StaAddr::Yplus
+				| StaAddr::Yminus
+				| StaAddr::plusY
+				| StaAddr::minusY => 1,
+			},
+			Instruction::LDA(adr) => match adr {
+				LdaAddr::Data | LdaAddr::Addr | LdaAddr::nSP | LdaAddr::nX | LdaAddr::nY => 2,
+				LdaAddr::AX
+				| LdaAddr::Xplus
+				| LdaAddr::Xminus
+				| LdaAddr::plusX
+				| LdaAddr::minusX
+				| LdaAddr::AY
+				| LdaAddr::Yplus
+				| LdaAddr::Yminus
+				| LdaAddr::plusY
+				| LdaAddr::minusY => 1,
+			},
 		}
 	}
 }
