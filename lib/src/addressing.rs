@@ -86,13 +86,14 @@ pub enum AddrTypeOne {
 impl AddrTypeOne {
 	pub fn get_index(&self, flisp: &Flisp, n: u8) -> usize {
 		match self {
-			AddrTypeOne::Addr => n as usize,
-			AddrTypeOne::nSP => n.wrapping_add(flisp.SP) as usize,
-			AddrTypeOne::nX => n.wrapping_add(flisp.X) as usize,
-			AddrTypeOne::nY => n.wrapping_add(flisp.Y) as usize,
-			AddrTypeOne::AX => flisp.A.wrapping_add(flisp.X) as usize,
-			AddrTypeOne::AY => flisp.A.wrapping_add(flisp.Y) as usize,
+			AddrTypeOne::Addr => n,
+			AddrTypeOne::nSP => n.wrapping_add(flisp.SP),
+			AddrTypeOne::nX => n.wrapping_add(flisp.X),
+			AddrTypeOne::nY => n.wrapping_add(flisp.Y),
+			AddrTypeOne::AX => flisp.A.wrapping_add(flisp.X),
+			AddrTypeOne::AY => flisp.A.wrapping_add(flisp.Y),
 		}
+		.into()
 	}
 
 	pub fn write_with_next<T: fmt::Write>(&self, buf: &mut T, next: u8) -> Result<u8> {
@@ -155,13 +156,14 @@ pub enum AddrTypeThree {
 impl AddrTypeThree {
 	pub fn get_index(&self, flisp: &Flisp, n: u8) -> usize {
 		match self {
-			AddrTypeThree::Addr => n as usize,
-			AddrTypeThree::nSP => n.wrapping_add(flisp.SP) as usize,
-			AddrTypeThree::nX => n.wrapping_add(flisp.X) as usize,
-			AddrTypeThree::nY => n.wrapping_add(flisp.Y) as usize,
-			AddrTypeThree::AY => flisp.A.wrapping_add(flisp.Y) as usize,
-			AddrTypeThree::AX => flisp.A.wrapping_add(flisp.X) as usize,
+			AddrTypeThree::Addr => n,
+			AddrTypeThree::nSP => n.wrapping_add(flisp.SP),
+			AddrTypeThree::nX => n.wrapping_add(flisp.X),
+			AddrTypeThree::nY => n.wrapping_add(flisp.Y),
+			AddrTypeThree::AY => flisp.A.wrapping_add(flisp.Y),
+			AddrTypeThree::AX => flisp.A.wrapping_add(flisp.X),
 		}
+		.into()
 	}
 
 	pub fn write_with_next<T: fmt::Write>(&self, buf: &mut T, next: u8) -> Result<u8> {

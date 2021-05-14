@@ -1,5 +1,8 @@
 use anyhow::Result;
-use crossterm::{cursor, event, execute, ExecutableCommand};
+use crossterm::{
+	event, execute,
+	terminal::{EnterAlternateScreen, LeaveAlternateScreen},
+};
 use flisp_lib::processor::Flisp;
 use std::{fmt::Write as fmtWrite, io, time::Duration};
 use tui::{
@@ -44,6 +47,7 @@ fn write_mem(mem: &[u8; 256], out: &mut String) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+	execute!(io::stdout(), EnterAlternateScreen)?;
 	let mut flisp = Flisp {
 		A: 0,
 		X: 0,
@@ -70,7 +74,7 @@ fn main() -> Result<()> {
 
 	let mut dis_asm_buffer = String::new();
 
-	loop {
+	'drawing_loop: loop {
 		register_a_buffer.clear();
 		register_x_buffer.clear();
 		register_y_buffer.clear();
@@ -85,7 +89,7 @@ fn main() -> Result<()> {
 		write!(&mut register_y_buffer, "0x{:02X}", flisp.Y)?;
 		write!(&mut register_pc_buffer, "0x{:02X}", flisp.PC)?;
 		write!(&mut register_sp_buffer, "0x{:02X}", flisp.SP)?;
-		write!(&mut register_cc_buffer, "0x{:02X}", flisp.CC)?;
+		write!(&mut register_cc_buffer, "0b {:05b}", flisp.CC)?;
 
 		let mut idx = flisp.PC;
 		loop {
@@ -101,100 +105,97 @@ fn main() -> Result<()> {
 			.map(ListItem::new)
 			.collect::<Vec<_>>();
 
-		{
-			let flisp = &flisp; //To make sure it's not being edited in collapsed draw
-			terminal.draw(|f| {
-				let control_split = Layout::default()
-					.direction(Direction::Vertical)
-					.margin(1)
-					.constraints([
-						Constraint::Min(18),
-						Constraint::Min(f.size().height.saturating_sub(23)),
+		terminal.draw(|f| {
+			let control_split = Layout::default()
+				.direction(Direction::Vertical)
+				.margin(1)
+				.constraints([
+					Constraint::Min(18),
+					Constraint::Min(f.size().height.saturating_sub(23)),
+					Constraint::Min(3),
+				])
+				.split(f.size());
+			let ui_split = Layout::default()
+				.direction(Direction::Horizontal)
+				.constraints(
+					[
+						Constraint::Min(3 * 16 + 1),
+						Constraint::Min(10),
+						Constraint::Min(20),
+						Constraint::Min(f.size().width.saturating_sub(3 * 16 + 31)),
+					]
+					.as_ref(),
+				)
+				.split(control_split[0]);
+			let register_split = Layout::default()
+				.direction(Direction::Vertical)
+				.constraints(
+					[
 						Constraint::Min(3),
-					])
-					.split(f.size());
-				let ui_split = Layout::default()
-					.direction(Direction::Horizontal)
-					.constraints(
-						[
-							Constraint::Min(3 * 16 + 1),
-							Constraint::Min(10),
-							Constraint::Min(20),
-							Constraint::Min(f.size().width.saturating_sub(3 * 16 + 31)),
-						]
-						.as_ref(),
-					)
-					.split(control_split[0]);
-				let register_split = Layout::default()
-					.direction(Direction::Vertical)
-					.constraints(
-						[
-							Constraint::Min(3),
-							Constraint::Min(3),
-							Constraint::Min(3),
-							Constraint::Min(3),
-							Constraint::Min(3),
-							Constraint::Min(3),
-						]
-						.as_ref(),
-					)
-					.split(ui_split[1]);
-
-				let widths = vec![Constraint::Min(2); 16];
-				let memory_table = Table::new(
-					memory_text_buffer
-						.lines()
-						.map(|line| Row::new(line.trim().split_ascii_whitespace())),
+						Constraint::Min(3),
+						Constraint::Min(3),
+						Constraint::Min(3),
+						Constraint::Min(3),
+						Constraint::Min(3),
+					]
+					.as_ref(),
 				)
-				.block(
-					Block::default()
-						.title("Memory")
-						.borders(Borders::ALL)
-						.border_type(BorderType::Rounded),
-				)
-				.widths(&widths);
-				f.render_widget(memory_table, ui_split[0]);
+				.split(ui_split[1]);
 
-				let title_text: [(&str, &str); 6] = [
-					("A", &register_a_buffer),
-					("X", &register_x_buffer),
-					("Y", &register_y_buffer),
-					("CC", &register_cc_buffer),
-					("SP", &register_sp_buffer),
-					("PC", &register_pc_buffer),
-				];
-				for (idx, (title, text)) in title_text.iter().cloned().enumerate() {
-					f.render_widget(
-						Paragraph::new(Span::raw(text)).block(
-							Block::default()
-								.borders(Borders::ALL)
-								.border_type(BorderType::Rounded)
-								.title(title),
-						),
-						register_split[idx],
-					);
-				}
+			let widths = vec![Constraint::Min(2); 16];
+			let memory_table = Table::new(
+				memory_text_buffer
+					.lines()
+					.map(|line| Row::new(line.trim().split_ascii_whitespace())),
+			)
+			.block(
+				Block::default()
+					.title("Memory")
+					.borders(Borders::ALL)
+					.border_type(BorderType::Rounded),
+			)
+			.widths(&widths);
+			f.render_widget(memory_table, ui_split[0]);
 
-				let dis_asm_list = List::new(items).block(
-					Block::default()
-						.borders(Borders::ALL)
-						.border_type(BorderType::Rounded)
-						.title("Disassembly"),
+			let title_text: [(&str, &str); 6] = [
+				("A", &register_a_buffer),
+				("X", &register_x_buffer),
+				("Y", &register_y_buffer),
+				("CC─INZVC", &register_cc_buffer),
+				("SP", &register_sp_buffer),
+				("PC", &register_pc_buffer),
+			];
+			for (idx, (title, text)) in title_text.iter().cloned().enumerate() {
+				f.render_widget(
+					Paragraph::new(Span::raw(text)).block(
+						Block::default()
+							.borders(Borders::ALL)
+							.border_type(BorderType::Rounded)
+							.title(title),
+					),
+					register_split[idx],
 				);
-				f.render_widget(dis_asm_list, ui_split[2]);
+			}
 
-				let controls_paragraph = Paragraph::new(Span::raw(
-					"Step: [H]    Run: [J]    Faster: [K]    Slower: [L]    Command: [:]",
-				))
-				.block(
-					Block::default()
-						.borders(Borders::ALL)
-						.border_type(BorderType::Rounded)
-						.title("Controls"),
-				);
-				f.render_widget(controls_paragraph, control_split[2]);
-			})?;
-		}
+			let dis_asm_list = List::new(items).block(
+				Block::default()
+					.borders(Borders::ALL)
+					.border_type(BorderType::Rounded)
+					.title("Disassembly"),
+			);
+			f.render_widget(dis_asm_list, ui_split[2]);
+
+			let controls_paragraph = Paragraph::new(Span::raw(
+				"Step: [H]    Run: [J]    Faster: [K]    Slower: [L]    Command: [:]",
+			))
+			.block(
+				Block::default()
+					.borders(Borders::ALL)
+					.border_type(BorderType::Rounded)
+					.title("Controls"),
+			);
+			f.render_widget(controls_paragraph, control_split[2]);
+		})?;
 
 		if event::poll(Duration::from_millis(50))? {
 			if let event::Event::Key(key) = event::read()? {
@@ -208,8 +209,7 @@ fn main() -> Result<()> {
 						_ => {}
 					},
 					event::KeyCode::Esc => {
-						crossterm::terminal::disable_raw_mode()?;
-						return Ok(());
+						break 'drawing_loop;
 					}
 					_ => {}
 				}
@@ -220,5 +220,6 @@ fn main() -> Result<()> {
 	println!("Command started?");
 
 	crossterm::terminal::disable_raw_mode()?;
+	execute!(io::stdout(), LeaveAlternateScreen)?;
 	Ok(())
 }

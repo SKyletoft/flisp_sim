@@ -1,4 +1,4 @@
-use std::{collections::btree_set::Intersection, convert::TryFrom};
+use std::convert::TryFrom;
 
 use crate::*;
 
@@ -721,12 +721,7 @@ impl From<Instruction> for u8 {
 impl Instruction {
 	pub fn size(&self) -> u8 {
 		match self {
-			Instruction::ADCA(_)
-			| Instruction::ADDA(_)
-			| Instruction::ANDA(_)
-			| Instruction::ANDCC
-			| Instruction::BITA(_)
-			| Instruction::BLE
+			Instruction::BLE
 			| Instruction::BLS
 			| Instruction::BLT
 			| Instruction::BMI
@@ -742,13 +737,21 @@ impl Instruction {
 			| Instruction::BGE
 			| Instruction::BGT
 			| Instruction::BHI
+			| Instruction::JMP(_)
+			| Instruction::JSR(_) => 2,
+
+			Instruction::RTS | Instruction::RTI => 1,
+
+			Instruction::ADCA(_)
+			| Instruction::ADDA(_)
+			| Instruction::ANDA(_)
+			| Instruction::ANDCC
+			| Instruction::BITA(_)
 			| Instruction::CMPA(_)
 			| Instruction::CMPX(_)
 			| Instruction::CMPY(_)
 			| Instruction::CMPSP(_)
 			| Instruction::EORA(_)
-			| Instruction::JMP(_)
-			| Instruction::JSR(_)
 			| Instruction::LEAX(_)
 			| Instruction::LEAY(_)
 			| Instruction::LEASP(_)
@@ -780,8 +783,6 @@ impl Instruction {
 			| Instruction::PULCC
 			| Instruction::ROLA
 			| Instruction::RORA
-			| Instruction::RTS
-			| Instruction::RTI
 			| Instruction::TFR(_)
 			| Instruction::TSTA => 1,
 

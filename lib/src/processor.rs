@@ -43,7 +43,7 @@ impl Flisp {
 		self.CC = (self.CC & !(1 << 1)) | ((to as u8) << 1);
 	}
 	fn get_v(&self) -> bool {
-		self.CC & (1 << 2) != 0
+		self.CC & (1 << 1) != 0
 	}
 	fn set_c(&mut self, to: bool) {
 		self.CC = (self.CC & !1) | (to as u8);
@@ -99,8 +99,8 @@ impl Flisp {
 		let (diff, carry) = lhs.overflowing_sub(rhs);
 		self.set_n_from(diff);
 		self.set_z_from(diff);
-		self.set_v(carry);
-		self.set_c(diff as i8 > lhs as i8); //Unsure
+		self.set_v(diff as i8 > lhs as i8); //Unsure
+		self.set_c(carry);
 	}
 
 	fn com(&mut self, data: u8) -> u8 {
@@ -243,81 +243,95 @@ impl Flisp {
 			}
 			Instruction::BLE => {
 				if (self.get_n() ^ self.get_v()) || self.get_z() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BLS => {
 				if self.get_c() || self.get_z() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BLT => {
 				if self.get_n() ^ self.get_v() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BMI => {
 				if self.get_n() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BNE => {
 				if !self.get_z() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BPL => {
 				if self.get_n() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BRA => {
-				self.PC = self.PC.wrapping_add(n);
+				self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 			}
 			Instruction::BSR => {
 				//Ordering?
 				self.SP = self.SP.wrapping_sub(1);
 				self.mem[self.SP as usize] = self.PC;
-				self.PC = self.PC.wrapping_add(n);
+				self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 			}
 			Instruction::BVC => {
 				if !self.get_v() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BVS => {
 				if self.get_v() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BCC => {
 				if !self.get_c() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BCS => {
 				if self.get_c() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BEQ => {
 				if self.get_z() {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BGE => {
 				if !(self.get_n() ^ self.get_v()) {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BGT => {
 				if !((self.get_n() ^ self.get_v()) || self.get_z()) {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::BHI => {
 				if !(self.get_c() || self.get_z()) {
-					self.PC = self.PC.wrapping_add(n);
+					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
+					return;
 				}
 			}
 			Instruction::CLRA => {
@@ -382,20 +396,22 @@ impl Flisp {
 			Instruction::JMP(adr) => {
 				let target = adr.get_target(&self, n);
 				self.PC = target;
+				return;
 			}
 			Instruction::JSR(adr) => {
 				let target = adr.get_target(&self, n);
 				self.SP = self.SP.wrapping_sub(1);
-				self.mem[self.SP as usize] = self.PC;
+				self.mem[self.SP as usize] = self.PC.wrapping_add(inst.size());
 				self.PC = target;
+				return;
 			}
 			Instruction::LDA(adr) => {
 				let data = match adr {
 					LdaAddr::Data => n,
 					LdaAddr::Addr => self.mem[n as usize],
-					LdaAddr::nSP => self.mem[(n + self.SP) as usize],
-					LdaAddr::nX => self.mem[(n + self.X) as usize],
-					LdaAddr::AX => self.mem[(self.A + self.X) as usize],
+					LdaAddr::nSP => self.mem[(n.wrapping_add(self.SP)) as usize],
+					LdaAddr::nX => self.mem[(n.wrapping_add(self.X)) as usize],
+					LdaAddr::AX => self.mem[(self.A.wrapping_add(self.X)) as usize],
 					LdaAddr::Xplus => {
 						let x = self.X;
 						self.X = self.X.wrapping_add(1);
@@ -414,8 +430,8 @@ impl Flisp {
 						self.X = self.X.wrapping_sub(1);
 						self.mem[self.X as usize]
 					}
-					LdaAddr::nY => self.mem[(n + self.Y) as usize],
-					LdaAddr::AY => self.mem[(self.A + self.Y) as usize],
+					LdaAddr::nY => self.mem[(n.wrapping_add(self.Y)) as usize],
+					LdaAddr::AY => self.mem[(self.A.wrapping_add(self.Y)) as usize],
 					LdaAddr::Yplus => {
 						let y = self.Y;
 						self.Y = self.Y.wrapping_add(1);
@@ -555,6 +571,7 @@ impl Flisp {
 			Instruction::RTS => {
 				self.PC = self.mem[self.SP as usize];
 				self.SP = self.SP.wrapping_add(1);
+				return;
 			}
 			Instruction::RTI => {
 				self.CC = self.mem[self.SP as usize];
@@ -567,54 +584,55 @@ impl Flisp {
 				self.SP = self.SP.wrapping_add(1);
 				self.PC = self.mem[self.SP as usize];
 				self.SP = self.SP.wrapping_add(1);
+				return;
 			}
 			Instruction::SBCA(adr) => {
 				let rhs = adr.get_value(&self, n);
-				self.A = self.sub(rhs + self.get_c() as u8);
+				self.A = self.sub(rhs.wrapping_add(self.get_c() as u8));
 			}
 			Instruction::STA(adr) => {
 				let idx = match adr {
-					StaAddr::Addr => self.mem[n as usize],
-					StaAddr::nSP => self.mem[(n + self.SP) as usize],
-					StaAddr::nX => self.mem[(n + self.X) as usize],
-					StaAddr::AX => self.mem[(self.A + self.X) as usize],
+					StaAddr::Addr => n,
+					StaAddr::nSP => n.wrapping_add(self.SP),
+					StaAddr::nX => n.wrapping_add(self.X),
+					StaAddr::AX => self.A.wrapping_add(self.X),
 					StaAddr::Xplus => {
 						let x = self.X;
 						self.X = self.X.wrapping_add(1);
-						self.mem[x as usize]
+						x
 					}
 					StaAddr::Xminus => {
 						let x = self.X;
 						self.X = self.X.wrapping_sub(1);
-						self.mem[x as usize]
+						x
 					}
 					StaAddr::plusX => {
 						self.X = self.X.wrapping_add(1);
-						self.mem[self.X as usize]
+						self.X
 					}
 					StaAddr::minusX => {
 						self.X = self.X.wrapping_sub(1);
-						self.mem[self.X as usize]
+						self.X
 					}
-					StaAddr::nY => self.mem[(n + self.Y) as usize],
-					StaAddr::AY => self.mem[(self.A + self.Y) as usize],
+					StaAddr::nY => n.wrapping_add(self.Y),
+					StaAddr::AY => self.A.wrapping_add(self.Y),
 					StaAddr::Yplus => {
 						let y = self.Y;
 						self.Y = self.Y.wrapping_add(1);
-						self.mem[y as usize]
+						y
 					}
 					StaAddr::Yminus => {
 						let y = self.Y;
 						self.Y = self.Y.wrapping_sub(1);
-						self.mem[y as usize]
+						y
 					}
 					StaAddr::plusY => {
 						self.Y = self.Y.wrapping_add(1);
-						self.mem[self.Y as usize]
+						self.Y
 					}
 					StaAddr::minusY => {
 						self.Y = self.Y.wrapping_sub(1);
-						self.mem[self.Y as usize]
+						self.Y
 					}
 				} as usize;
 				self.mem[idx] = self.A;
@@ -1134,11 +1152,14 @@ impl Default for Flisp {
 
 #[cfg(test)]
 mod test {
+	use std::collections::VecDeque;
 	use std::str::FromStr;
 
 	use crate::*;
 	#[test]
 	fn primes() {
+		let mut step = 0;
+		let mut step_history = VecDeque::with_capacity(128);
 		let primes_source = include_str!("deps/primes_source.fmem");
 		let mut flisp = Flisp::from_str(primes_source).unwrap();
 		let starting_mem = [
@@ -1162,12 +1183,6 @@ mod test {
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x9B,
 		];
-		assert_eq!(flisp.mem, starting_mem);
-
-		while flisp.SP != 0x9F {
-			flisp.step();
-		}
-
 		let ending_mem: [u8; 256] = [
 			0x02, 0x03, 0x05, 0x07, 0x0B, 0x0D, 0x11, 0x13, 0x17, 0x1D, 0x1F, 0x25, 0x29, 0x2B,
 			0x2F, 0x35, 0x3B, 0x3D, 0x43, 0x47, 0x49, 0x4F, 0x53, 0x59, 0x61, 0x65, 0x67, 0x6B,
@@ -1189,6 +1204,35 @@ mod test {
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x7F, 0x50, 0x71, 0x6E, 0x1E, 0x81, 0x9F, 0x00,
 			0x00, 0x00, 0x00, 0x9B,
 		];
+		assert_eq!(flisp.mem, starting_mem);
+
+		while flisp.PC != 0x9F {
+			if step_history.contains(&flisp) {
+				panic!("Infinite loop\nStep: {}\nState: {:X?}", step, &flisp);
+			}
+			while step_history.len() >= 128 {
+				step_history.pop_front();
+			}
+			step_history.push_back(flisp.clone());
+			flisp.step();
+			step += 1;
+			assert!(
+				flisp.PC >= 0x39 || flisp.PC <= 0xA0,
+				"Jumped out of program"
+			);
+			for ((from, to), actual) in starting_mem
+				.iter()
+				.zip(ending_mem.iter())
+				.zip(flisp.mem.iter())
+				.take(0x3C)
+			{
+				assert!(
+					actual == from || actual == to,
+					"Wrong result in primes list"
+				);
+			}
+		}
+
 		assert_eq!(flisp.mem, ending_mem);
 	}
 }
