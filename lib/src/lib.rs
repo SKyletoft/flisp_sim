@@ -4,6 +4,7 @@ pub mod instructions;
 pub mod processor;
 
 use addressing::*;
-use error::{FlispError, Result};
-use instructions::Instruction;
-use processor::Flisp;
+pub use error::FlispError;
+use error::Result;
+pub use instructions::Instruction;
+pub use processor::Flisp;
