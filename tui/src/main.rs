@@ -1,10 +1,11 @@
 use anyhow::Result;
 use crossterm::{
-	event, execute,
+	cursor, event, execute, style, terminal,
 	terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
+use error::RunTimeError;
 use flisp_lib::processor::Flisp;
-use std::{fmt::Write as fmtWrite, io, time::Duration};
+use std::{fmt::Write as fmtWrite, io, str::FromStr, time::Duration};
 use tui::{
 	backend::CrosstermBackend,
 	layout::{Constraint, Direction, Layout},
@@ -12,6 +13,10 @@ use tui::{
 	widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Row, Table},
 	Terminal,
 };
+
+mod error;
+mod io_device;
+use io_device::IoDevice;
 
 const MEM_SLICE: [u8; 256] = [
 	0x02, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -46,6 +51,74 @@ fn write_mem(mem: &[u8; 256], out: &mut String) -> Result<()> {
 	Ok(())
 }
 
+fn handle_command(
+	cmd: &mut String,
+	flisp: &mut Flisp,
+	fb: &mut IoDevice,
+	fc: &mut IoDevice,
+	speed: &mut u64,
+) -> Result<()> {
+	cmd.make_ascii_lowercase();
+	let words = cmd.split_whitespace().collect::<Vec<_>>();
+	if words.is_empty() {
+		return Ok(());
+	}
+	match words[0] {
+		"step" => {
+			let steps = words
+				.get(1)
+				.map(|str| {
+					str.parse::<u64>()
+						.map_err(|_| RunTimeError::MalformedArgument)
+				})
+				.unwrap_or(Ok(1))?;
+			for _ in 0..steps {
+				flisp.step();
+			}
+		}
+		"load" => {
+			let file_path = words.get(1).ok_or(RunTimeError::MalformedArgument)?;
+			let file = std::fs::read_to_string(file_path).map_err(|_| RunTimeError::BadFilePath)?;
+			let new_flisp = Flisp::from_str(&file).map_err(|_| RunTimeError::BadFile)?;
+			flisp.mem = new_flisp.mem;
+		}
+		"reset" => {
+			flisp.A = 0;
+			flisp.X = 0;
+			flisp.Y = 0;
+			flisp.CC = 0;
+			flisp.PC = 0xFF;
+			flisp.SP = 0;
+		}
+		"speed" => {
+			let num_str = words.get(1).ok_or(RunTimeError::MissingArgument)?;
+			let num: u64 = num_str
+				.parse()
+				.map_err(|_| RunTimeError::MalformedArgument)?;
+			*speed = num;
+		}
+		"io" => {
+			let dev = match words.get(1) {
+				Some(&"fb") => fb,
+				Some(&"fc") => fc,
+				_ => return Err(RunTimeError::InvalidIOPort.into()),
+			};
+			*dev = match words.get(2) {
+				Some(&"bargraph") => IoDevice::Bargraph,
+				Some(&"hexdisplay") => IoDevice::HexDisplay,
+				Some(&"sevenseg") => IoDevice::SevenSeg,
+				Some(&"steppermotor") => IoDevice::StepperMotor,
+				Some(&"dilswitch") => IoDevice::DILSwitch,
+				Some(&"keypad") => IoDevice::KeyPad,
+				Some(&"irqflipflop") => IoDevice::IRQFlipFlop,
+				_ => return Err(RunTimeError::InvalidDeviceType.into()),
+			}
+		}
+		_ => return Err(RunTimeError::InvalidCommand.into()),
+	}
+	Ok(())
+}
+
 fn main() -> Result<()> {
 	execute!(io::stdout(), EnterAlternateScreen)?;
 	let mut flisp = Flisp {
@@ -62,7 +135,12 @@ fn main() -> Result<()> {
 	let stdout = io::stdout();
 	let backend = CrosstermBackend::new(stdout);
 	let mut terminal = Terminal::new(backend)?;
-	crossterm::terminal::enable_raw_mode()?;
+	terminal::enable_raw_mode()?;
+
+	let mut steps_per_second = 1;
+	let mut pause = true;
+	let mut fb = IoDevice::Nothing;
+	let mut fc = IoDevice::Nothing;
 
 	let mut memory_text_buffer = String::new();
 	let mut register_a_buffer = String::new();
@@ -71,6 +149,8 @@ fn main() -> Result<()> {
 	let mut register_pc_buffer = String::new();
 	let mut register_sp_buffer = String::new();
 	let mut register_cc_buffer = String::new();
+	let mut command_buffer = String::new();
+	let mut log = String::new();
 
 	let mut dis_asm_buffer = String::new();
 
@@ -82,6 +162,7 @@ fn main() -> Result<()> {
 		register_sp_buffer.clear();
 		register_cc_buffer.clear();
 		dis_asm_buffer.clear();
+		command_buffer.clear();
 
 		write_mem(&flisp.mem, &mut memory_text_buffer)?;
 		write!(&mut register_a_buffer, "0x{:02X}", flisp.A)?;
@@ -104,6 +185,8 @@ fn main() -> Result<()> {
 			.lines()
 			.map(ListItem::new)
 			.collect::<Vec<_>>();
+
+		let log_lines = log.lines().map(ListItem::new).collect::<Vec<_>>();
 
 		terminal.draw(|f| {
 			let control_split = Layout::default()
@@ -195,31 +278,85 @@ fn main() -> Result<()> {
 					.title("Controls"),
 			);
 			f.render_widget(controls_paragraph, control_split[2]);
+
+			let log_list = List::new(log_lines).block(Block::default());
+			f.render_widget(log_list, control_split[1]);
 		})?;
 
-		if event::poll(Duration::from_millis(50))? {
+		let wait = if pause || steps_per_second == 0 {
+			u64::MAX
+		} else {
+			1000 / steps_per_second
+		};
+		if event::poll(Duration::from_millis(wait))? {
 			if let event::Event::Key(key) = event::read()? {
 				match key.code {
+					event::KeyCode::Char('d')
+						if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+					{
+						break 'drawing_loop;
+					}
+
 					event::KeyCode::Char(c) => match c {
 						'h' => {
 							flisp.step();
 						}
-						'j' | 'k' | 'l' => {}
-						':' => break,
+						'j' => {
+							pause = !pause;
+						}
+						'k' => {
+							steps_per_second = steps_per_second.saturating_add(1);
+						}
+						'l' => {
+							steps_per_second = steps_per_second.saturating_sub(1);
+						}
+						':' => {
+							let (_, height) = crossterm::terminal::size()?;
+							execute!(
+								io::stdout(),
+								cursor::MoveTo(1, height),
+								style::Print(":"),
+								cursor::Show
+							)?;
+							terminal::disable_raw_mode()?;
+							io::stdin().read_line(&mut command_buffer)?;
+							terminal::enable_raw_mode()?;
+							execute!(
+								io::stdout(),
+								cursor::Hide,
+								terminal::ScrollDown(1),
+								terminal::Clear(terminal::ClearType::FromCursorDown)
+							)?;
+							let res = handle_command(
+								&mut command_buffer,
+								&mut flisp,
+								&mut fb,
+								&mut fc,
+								&mut steps_per_second,
+							);
+							log.push_str(&command_buffer);
+							log.push('\n');
+							if let Err(e) = res {
+								writeln!(log, "  {}", e)?;
+							}
+						}
 						_ => {}
 					},
+
 					event::KeyCode::Esc => {
 						break 'drawing_loop;
 					}
 					_ => {}
 				}
 			}
+		} else {
+			flisp.step();
 		}
 	}
 
 	println!("Command started?");
 
-	crossterm::terminal::disable_raw_mode()?;
+	terminal::disable_raw_mode()?;
 	execute!(io::stdout(), LeaveAlternateScreen)?;
 	Ok(())
 }
