@@ -24,30 +24,39 @@ impl Flisp {
 	fn set_n(&mut self, to: bool) {
 		self.CC = (self.CC & !(1 << 3)) | ((to as u8) << 3);
 	}
+
 	fn get_n(&self) -> bool {
 		self.CC & (1 << 3) != 0
 	}
+
 	fn set_n_from(&mut self, data: u8) {
 		self.set_n((data & 0b1000_0000) != 0);
 	}
+
 	fn set_z(&mut self, to: bool) {
 		self.CC = (self.CC & !(1 << 2)) | ((to as u8) << 2);
 	}
+
 	fn get_z(&self) -> bool {
 		self.CC & (1 << 2) != 0
 	}
+
 	fn set_z_from(&mut self, data: u8) {
 		self.set_z(data == 0);
 	}
+
 	fn set_v(&mut self, to: bool) {
 		self.CC = (self.CC & !(1 << 1)) | ((to as u8) << 1);
 	}
+
 	fn get_v(&self) -> bool {
 		self.CC & (1 << 1) != 0
 	}
+
 	fn set_c(&mut self, to: bool) {
 		self.CC = (self.CC & !1) | (to as u8);
 	}
+
 	fn get_c(&self) -> bool {
 		self.CC & 1 != 0
 	}
@@ -241,99 +250,85 @@ impl Flisp {
 				let rhs = adr.get_value(&self, n);
 				self.and(rhs);
 			}
-			Instruction::BLE => {
+			Instruction::BLE =>
 				if (self.get_n() ^ self.get_v()) || self.get_z() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BLS => {
+				},
+			Instruction::BLS =>
 				if self.get_c() || self.get_z() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BLT => {
+				},
+			Instruction::BLT =>
 				if self.get_n() ^ self.get_v() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BMI => {
+				},
+			Instruction::BMI =>
 				if self.get_n() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BNE => {
+				},
+			Instruction::BNE =>
 				if !self.get_z() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BPL => {
+				},
+			Instruction::BPL =>
 				if self.get_n() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
+				},
 			Instruction::BRA => {
 				self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 			}
 			Instruction::BSR => {
-				//Ordering?
+				// Ordering?
 				self.SP = self.SP.wrapping_sub(1);
 				self.mem[self.SP as usize] = self.PC;
 				self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 			}
-			Instruction::BVC => {
+			Instruction::BVC =>
 				if !self.get_v() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BVS => {
+				},
+			Instruction::BVS =>
 				if self.get_v() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BCC => {
+				},
+			Instruction::BCC =>
 				if !self.get_c() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BCS => {
+				},
+			Instruction::BCS =>
 				if self.get_c() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BEQ => {
+				},
+			Instruction::BEQ =>
 				if self.get_z() {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BGE => {
+				},
+			Instruction::BGE =>
 				if !(self.get_n() ^ self.get_v()) {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BGT => {
+				},
+			Instruction::BGT =>
 				if !((self.get_n() ^ self.get_v()) || self.get_z()) {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
-			Instruction::BHI => {
+				},
+			Instruction::BHI =>
 				if !(self.get_c() || self.get_z()) {
 					self.PC = self.PC.wrapping_add(n).wrapping_add(inst.size());
 					return;
-				}
-			}
+				},
 			Instruction::CLRA => {
 				self.clr();
 				self.A = 0;
@@ -1152,8 +1147,7 @@ impl Default for Flisp {
 
 #[cfg(test)]
 mod test {
-	use std::collections::VecDeque;
-	use std::str::FromStr;
+	use std::{collections::VecDeque, str::FromStr};
 
 	use crate::*;
 	#[test]

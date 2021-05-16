@@ -1,3 +1,5 @@
+use std::{fmt::Write as fmtWrite, io, str::FromStr, time::Duration};
+
 use anyhow::Result;
 use crossterm::{
 	cursor, event, execute, style, terminal,
@@ -5,7 +7,6 @@ use crossterm::{
 };
 use error::RunTimeError;
 use flisp_lib::processor::Flisp;
-use std::{fmt::Write as fmtWrite, io, str::FromStr, time::Duration};
 use tui::{
 	backend::CrosstermBackend,
 	layout::{Constraint, Direction, Layout},
@@ -87,8 +88,8 @@ fn handle_command(
 			flisp.X = 0;
 			flisp.Y = 0;
 			flisp.CC = 0;
-			flisp.PC = 0xFF;
 			flisp.SP = 0;
+			flisp.PC = 0xFF;
 		}
 		"speed" => {
 			let num_str = words.get(1).ok_or(RunTimeError::MissingArgument)?;
@@ -104,13 +105,14 @@ fn handle_command(
 				_ => return Err(RunTimeError::InvalidIOPort.into()),
 			};
 			*dev = match words.get(2) {
-				Some(&"bargraph") => IoDevice::Bargraph,
-				Some(&"hexdisplay") => IoDevice::HexDisplay,
-				Some(&"sevenseg") => IoDevice::SevenSeg,
-				Some(&"steppermotor") => IoDevice::StepperMotor,
-				Some(&"dilswitch") => IoDevice::DILSwitch,
-				Some(&"keypad") => IoDevice::KeyPad,
-				Some(&"irqflipflop") => IoDevice::IRQFlipFlop,
+				Some(&"clear") | None => IoDevice::Nothing,
+				Some(&"bargraph") => IoDevice::Bargraph(0),
+				Some(&"hexdisplay") => IoDevice::HexDisplay(0),
+				Some(&"sevenseg") => IoDevice::SevenSeg(0),
+				Some(&"steppermotor") => IoDevice::StepperMotor(0),
+				Some(&"dilswitch") => IoDevice::DILSwitch(0),
+				Some(&"keypad") => IoDevice::KeyPad(0),
+				Some(&"irqflipflop") => IoDevice::IRQFlipFlop(0),
 				_ => return Err(RunTimeError::InvalidDeviceType.into()),
 			}
 		}
@@ -132,9 +134,11 @@ fn main() -> Result<()> {
 	};
 	flisp.PC = flisp.mem[flisp.PC as usize];
 
-	let stdout = io::stdout();
-	let backend = CrosstermBackend::new(stdout);
+	let backend_stdout = io::stdout();
+	let backend = CrosstermBackend::new(backend_stdout);
 	let mut terminal = Terminal::new(backend)?;
+	let mut stdout = io::stdout();
+	let stdin = io::stdin();
 	terminal::enable_raw_mode()?;
 
 	let mut steps_per_second = 1;
@@ -151,7 +155,6 @@ fn main() -> Result<()> {
 	let mut register_cc_buffer = String::new();
 	let mut command_buffer = String::new();
 	let mut log = String::new();
-
 	let mut dis_asm_buffer = String::new();
 
 	'drawing_loop: loop {
@@ -200,29 +203,23 @@ fn main() -> Result<()> {
 				.split(f.size());
 			let ui_split = Layout::default()
 				.direction(Direction::Horizontal)
-				.constraints(
-					[
-						Constraint::Min(3 * 16 + 1),
-						Constraint::Min(10),
-						Constraint::Min(20),
-						Constraint::Min(f.size().width.saturating_sub(3 * 16 + 31)),
-					]
-					.as_ref(),
-				)
+				.constraints([
+					Constraint::Min(3 * 16 + 1),
+					Constraint::Min(10),
+					Constraint::Min(20),
+					Constraint::Min(f.size().width.saturating_sub(3 * 16 + 31)),
+				])
 				.split(control_split[0]);
 			let register_split = Layout::default()
 				.direction(Direction::Vertical)
-				.constraints(
-					[
-						Constraint::Min(3),
-						Constraint::Min(3),
-						Constraint::Min(3),
-						Constraint::Min(3),
-						Constraint::Min(3),
-						Constraint::Min(3),
-					]
-					.as_ref(),
-				)
+				.constraints([
+					Constraint::Min(3),
+					Constraint::Min(3),
+					Constraint::Min(3),
+					Constraint::Min(3),
+					Constraint::Min(3),
+					Constraint::Min(3),
+				])
 				.split(ui_split[1]);
 
 			let widths = vec![Constraint::Min(2); 16];
@@ -313,16 +310,16 @@ fn main() -> Result<()> {
 						':' => {
 							let (_, height) = crossterm::terminal::size()?;
 							execute!(
-								io::stdout(),
+								stdout,
 								cursor::MoveTo(1, height),
 								style::Print(":"),
 								cursor::Show
 							)?;
 							terminal::disable_raw_mode()?;
-							io::stdin().read_line(&mut command_buffer)?;
+							stdin.read_line(&mut command_buffer)?;
 							terminal::enable_raw_mode()?;
 							execute!(
-								io::stdout(),
+								stdout,
 								cursor::Hide,
 								terminal::ScrollDown(1),
 								terminal::Clear(terminal::ClearType::FromCursorDown)
@@ -334,10 +331,11 @@ fn main() -> Result<()> {
 								&mut fc,
 								&mut steps_per_second,
 							);
+							log.push_str(" >");
 							log.push_str(&command_buffer);
 							log.push('\n');
 							if let Err(e) = res {
-								writeln!(log, "  {}", e)?;
+								writeln!(log, "   {}", e)?;
 							}
 						}
 						_ => {}
@@ -357,6 +355,6 @@ fn main() -> Result<()> {
 	println!("Command started?");
 
 	terminal::disable_raw_mode()?;
-	execute!(io::stdout(), LeaveAlternateScreen)?;
+	execute!(stdout, LeaveAlternateScreen)?;
 	Ok(())
 }

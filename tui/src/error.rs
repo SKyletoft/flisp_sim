@@ -16,7 +16,7 @@ impl fmt::Display for RunTimeError {
 		let s = match self {
 			RunTimeError::InvalidDeviceType => "Invalid IO device type",
 			RunTimeError::InvalidIOPort => "Invalid IO port",
-			RunTimeError::InvalidCommand => "Invalid command\n  Type \"help\" or \"?\" for help",
+			RunTimeError::InvalidCommand => "Invalid command\n   Type \"help\" or \"?\" for help",
 			RunTimeError::MissingArgument => "Missing argument",
 			RunTimeError::MalformedArgument => "Malformed argument or unparsable number",
 			RunTimeError::BadFilePath => "Cannot find file specified",
